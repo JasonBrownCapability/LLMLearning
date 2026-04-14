@@ -50,14 +50,17 @@ Or pass `--no-wandb` to all commands to skip logging.
 When running on RunPod, attach a **Network Volume** (50GB is sufficient) to preserve downloaded models and results across pod restarts. The volume mounts at `/workspace` by default.
 
 ```bash
-# Cache HuggingFace models on the persistent volume
-export HF_HOME=/workspace/.cache/huggingface
+# Cache HuggingFace models on the persistent volume (and persist across restarts)
+echo 'export HF_HOME=/workspace/.cache/huggingface' >> ~/.bashrc
+source ~/.bashrc
 
 # Create a results directory on the persistent volume
 mkdir -p /workspace/results
 ```
 
 Then pass `--output-dir /workspace/results` to all training commands. Without this, downloaded models (~16GB) must be re-downloaded on every restart, and results are lost if the pod stops.
+
+> **Note:** The `~/.bashrc` line only needs to be added once. On subsequent pod restarts, `HF_HOME` will be set automatically.
 
 ## Running the Experiment
 
