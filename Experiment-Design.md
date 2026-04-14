@@ -212,33 +212,68 @@ Compare 1, 2, 3, 4 inserted layers (adjusting LoRA rank in condition B to match 
 
 ---
 
-## 8. Expected Outcomes and Interpretation
+## 8. Future Conditions (Post-Main Experiment)
 
-### 8.1 If C > B (inserted layers beat LoRA)
+These conditions extend the experiment if the main results (A-E) show interesting differences between LoRA and inserted layers.
+
+### 8.1 Condition F: Partial Freezing (Inserted Layers + Neighbouring Layers)
+
+Instead of freezing *all* base layers when training inserted layers (as in condition C), only freeze layers *outside* the insertion region. Layers between the two insertion points (layers 10-21) remain trainable alongside the inserted layers, while layers 0-9 and 22-33 stay frozen.
+
+**Intuition**: The layers adjacent to the insertion points may need to adapt to work with their new neighbours. In condition C, the inserted layers must fit into an existing processing pipeline that wasn't designed for them. Partial freezing gives the surrounding layers freedom to adjust.
+
+**Trade-off**: This increases the trainable parameter count significantly (~12 base layers + 2 inserted layers vs just 2 inserted layers), which muddies the comparison with condition B. To maintain a fair parameter budget comparison, the LoRA rank in condition B would need to be increased to match, or this condition should be interpreted as testing a different question: *does the benefit of inserted layers increase when nearby layers can co-adapt?*
+
+### 8.2 Condition G: Layer-wise LoRA Distillation into Inserted Layers
+
+Rather than training inserted layers via RL from scratch, distill the knowledge from a trained LoRA model directly into the inserted layers using supervised regression on internal representations.
+
+**Process**:
+1. Start with the trained LoRA model from condition B
+2. For each insertion position (e.g. position 10):
+   - Feed training inputs through layers 0-9 (identical in both base and LoRA models)
+   - Capture the residual stream at that point
+   - The LoRA model produces a different output at layer 10 than the base model due to the LoRA adapters
+   - Train the inserted layer to reproduce that *difference* — the delta between the LoRA-modified layer's output and the base layer's output
+3. The inserted layer now approximates what LoRA learned at that specific point in the network
+
+**Why this is interesting**:
+- Much faster than GRPO training (supervised regression on cached activations, no rollout generation needed)
+- If it works, it proves that distributed LoRA knowledge can be compressed into serial depth
+- Could be a practical method for converting LoRA adapters into permanent architectural modifications
+- Comparing G vs C reveals whether RL exploration or LoRA distillation is a better training signal for inserted layers
+
+**Limitation**: Two inserted layers may not have enough capacity to replicate what LoRA changes across all 32 layers. The LoRA modifications are distributed, and compressing them into 2 points loses information. Measuring how much accuracy is retained vs lost would itself be informative.
+
+---
+
+## 9. Expected Outcomes and Interpretation
+
+### 9.1 If C > B (inserted layers beat LoRA)
 The depth hypothesis is supported. Reasoning improvement benefits from additional serial computation that LoRA cannot provide. This would be a significant finding worth reporting, and justifies exploring the two-stage CLS approach further.
 
-### 8.2 If C ≈ B (comparable performance)
+### 9.2 If C ≈ B (comparable performance)
 Depth is not a bottleneck for the tested reasoning tasks at this model scale. Possible explanations: (a) 8B models already have sufficient depth for GSM8K-level reasoning, (b) LoRA's ability to rewire existing circuits is as effective as new circuits for this difficulty level. **Follow-up**: test on harder benchmarks (MATH level 5, GPQA) where depth limitations might be more apparent.
 
-### 8.3 If C < B (LoRA beats inserted layers)
+### 9.3 If C < B (LoRA beats inserted layers)
 The optimisation challenge of training new layers from zero-init outweighs the theoretical depth advantage. Possible explanations: (a) RL signal is too sparse to train fresh layers effectively, (b) zero-init creates a gradient bottleneck that prevents learning within the training budget. **Follow-up**: test condition E (two-stage) which specifically addresses the optimisation difficulty via LoRA scaffolding. If E > C, the architecture has merit but needs the scaffolding. If E ≈ C, the approach may not be viable.
 
-### 8.4 If D ≈ C (SFT matches RL for inserted layers)
+### 9.4 If D ≈ C (SFT matches RL for inserted layers)
 RL's advantage over SFT may not extend to inserted-layer training. This would suggest the inserted layers primarily learn to *reproduce* existing reasoning patterns rather than *discover* new ones. This would be a meaningful negative result for the RL component specifically.
 
-### 8.5 If E > C (two-stage beats direct RL)
+### 9.5 If E > C (two-stage beats direct RL)
 The CLS-inspired pipeline adds value — LoRA scaffolding makes the optimisation landscape easier for inserted layer training. This validates the biological analogy and suggests a practical training pipeline for production use.
 
 ---
 
-## 9. Infrastructure and Timeline
+## 10. Infrastructure and Timeline
 
-### 9.1 Hardware
+### 10.1 Hardware
 - **Minimum**: 1x A100 80GB (or equivalent: H100, 2x A6000 48GB)
 - **Comfortable**: 2x A100 80GB (allows larger rollout groups and longer sequences)
 - **Cloud estimate**: ~$2/hr for 1x A100 on most cloud providers
 
-### 9.2 Estimated Compute Time
+### 10.2 Estimated Compute Time
 
 | Step | Time (1x A100) |
 |---|---|
@@ -253,7 +288,7 @@ The CLS-inspired pipeline adds value — LoRA scaffolding makes the optimisation
 
 **Total cloud cost estimate**: ~$100-200 for the main experiment. ~$60-80 additional for ablations.
 
-### 9.3 Software Stack
+### 10.3 Software Stack
 
 - **Model**: `meta-llama/Llama-3.1-8B` via HuggingFace
 - **Quantisation**: `bitsandbytes` (4-bit NF4)
@@ -263,7 +298,7 @@ The CLS-inspired pipeline adds value — LoRA scaffolding makes the optimisation
 - **Evaluation**: `lm-evaluation-harness` (EleutherAI) for standardised benchmark evaluation
 - **Logging**: `wandb` for training curves and comparison
 
-### 9.4 Implementation Order
+### 10.4 Implementation Order
 
 1. **Setup and verification** (~1 day)
    - Load Llama 3.1 8B in 4-bit
@@ -299,7 +334,7 @@ The CLS-inspired pipeline adds value — LoRA scaffolding makes the optimisation
 
 ---
 
-## 10. Risks and Mitigations
+## 11. Risks and Mitigations
 
 | Risk | Mitigation |
 |---|---|
