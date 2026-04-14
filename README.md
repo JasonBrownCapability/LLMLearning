@@ -32,7 +32,7 @@ pip install -r requirements.txt
 ### 3. Log in to HuggingFace
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 Enter your HuggingFace token when prompted. You need this to download Llama 3.1 8B.
@@ -216,7 +216,7 @@ All hyperparameters are in `experiment/config.py`. Key settings:
 ### Model download fails
 
 - Confirm you have accepted the Llama 3 licence at https://huggingface.co/meta-llama/Llama-3.1-8B
-- Confirm `huggingface-cli login` succeeded
+- Confirm `hf auth login` succeeded
 - Try setting `HF_TOKEN` environment variable directly
 
 ### Training loss not decreasing (Condition C)
