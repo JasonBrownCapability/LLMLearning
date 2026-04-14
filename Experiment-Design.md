@@ -24,7 +24,7 @@ Five conditions, each starting from the same frozen base model:
 
 ### 2.1 Parameter Budget Control
 
-A fair comparison requires controlling for trainable parameter count. For Llama 3 8B:
+A fair comparison requires controlling for trainable parameter count. For Llama 3.1 8B:
 
 - **Single transformer layer**: ~250M parameters
 - **2 inserted layers**: ~500M trainable parameters
@@ -43,7 +43,7 @@ This gives a roughly matched parameter budget between conditions B and C, isolat
 
 ## 3. Base Model
 
-**Llama 3 8B** (base, not instruct)
+**Llama 3.1 8B** (base, not instruct)
 
 Rationale:
 - Well-studied, widely available, strong community support
@@ -255,7 +255,7 @@ The CLS-inspired pipeline adds value — LoRA scaffolding makes the optimisation
 
 ### 9.3 Software Stack
 
-- **Model**: `meta-llama/Meta-Llama-3-8B` via HuggingFace
+- **Model**: `meta-llama/Llama-3.1-8B` via HuggingFace
 - **Quantisation**: `bitsandbytes` (4-bit NF4)
 - **RL training**: `trl` (HuggingFace TRL, `GRPOTrainer`)
 - **LoRA**: `peft` (HuggingFace PEFT)
@@ -266,7 +266,7 @@ The CLS-inspired pipeline adds value — LoRA scaffolding makes the optimisation
 ### 9.4 Implementation Order
 
 1. **Setup and verification** (~1 day)
-   - Load Llama 3 8B in 4-bit
+   - Load Llama 3.1 8B in 4-bit
    - Implement layer insertion code with zero-init
    - Verify no-op property: modified model matches base model outputs exactly
    - Run baseline evaluation (Condition A)

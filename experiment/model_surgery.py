@@ -8,10 +8,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from .config import ModelConfig, InsertedLayerConfig
 
 
-def load_base_model(config: ModelConfig):
+def load_base_model(config: ModelConfig, smoke_test: bool = False):
     """Load the base model with optional 4-bit quantisation."""
     quantization_config = None
-    if config.quantize_4bit:
+    if config.quantize_4bit and not smoke_test:
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
@@ -22,8 +22,8 @@ def load_base_model(config: ModelConfig):
     model = AutoModelForCausalLM.from_pretrained(
         config.name,
         quantization_config=quantization_config,
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
+        torch_dtype=torch.float32 if smoke_test else torch.bfloat16,
+        device_map="cpu" if smoke_test else "auto",
         trust_remote_code=config.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
@@ -47,9 +47,9 @@ def create_inserted_layer(model, config: InsertedLayerConfig):
     reference_layer = model.model.layers[0]
     new_layer = copy.deepcopy(reference_layer)
 
-    # Move to same device/dtype as reference, in full precision for training
-    device = next(reference_layer.parameters()).device
-    new_layer = new_layer.to(device=device, dtype=torch.bfloat16)
+    # Move to same device/dtype as reference
+    ref_param = next(reference_layer.parameters())
+    new_layer = new_layer.to(device=ref_param.device, dtype=ref_param.dtype)
 
     # Reinitialise all parameters
     for name, param in new_layer.named_parameters():

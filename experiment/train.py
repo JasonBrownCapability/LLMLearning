@@ -9,6 +9,9 @@ Usage:
 
     # Quick test (10 steps, 50 eval samples):
     python -m experiment.train --condition b --test-run
+
+    # Local CPU smoke test (tiny model, no GPU required):
+    python -m experiment.train --condition a --smoke-test
 """
 
 import argparse
@@ -84,13 +87,13 @@ class GradientNormCallback(TrainerCallback):
                 pass
 
 
-def run_condition_a(config: ExperimentConfig, test_run: bool = False):
+def run_condition_a(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False):
     """Condition A: Baseline — evaluate the unmodified base model."""
     print("\n" + "=" * 60)
     print("CONDITION A: Baseline (no training)")
     print("=" * 60)
 
-    model, tokenizer = load_base_model(config.model)
+    model, tokenizer = load_base_model(config.model, smoke_test=smoke_test)
     print_model_summary(model)
 
     max_samples = 50 if test_run else None
@@ -103,13 +106,13 @@ def run_condition_a(config: ExperimentConfig, test_run: bool = False):
     return results
 
 
-def run_condition_b(config: ExperimentConfig, test_run: bool = False):
+def run_condition_b(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False):
     """Condition B: LoRA + GRPO on frozen base."""
     print("\n" + "=" * 60)
     print("CONDITION B: LoRA + GRPO")
     print("=" * 60)
 
-    model, tokenizer = load_base_model(config.model)
+    model, tokenizer = load_base_model(config.model, smoke_test=smoke_test)
 
     # Configure LoRA (passed directly to GRPOTrainer via peft_config)
     lora_config = LoraConfig(
@@ -145,7 +148,7 @@ def run_condition_b(config: ExperimentConfig, test_run: bool = False):
         seed=config.seed,
         report_to="wandb" if config.use_wandb else "none",
         run_name="condition_b_lora_rl",
-        bf16=True,
+        bf16=not smoke_test,
     )
 
     trainer = GRPOTrainer(
@@ -175,13 +178,13 @@ def run_condition_b(config: ExperimentConfig, test_run: bool = False):
     return results
 
 
-def run_condition_c(config: ExperimentConfig, test_run: bool = False):
+def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False):
     """Condition C: Inserted layers + GRPO on frozen base."""
     print("\n" + "=" * 60)
     print("CONDITION C: Inserted Layers + GRPO")
     print("=" * 60)
 
-    model, tokenizer = load_base_model(config.model)
+    model, tokenizer = load_base_model(config.model, smoke_test=smoke_test)
 
     # Insert layers and configure trainability
     freeze_base_model(model)
@@ -220,7 +223,7 @@ def run_condition_c(config: ExperimentConfig, test_run: bool = False):
         seed=config.seed,
         report_to="wandb" if config.use_wandb else "none",
         run_name="condition_c_inserted_rl",
-        bf16=True,
+        bf16=not smoke_test,
     )
 
     trainer = GRPOTrainer(
@@ -249,13 +252,13 @@ def run_condition_c(config: ExperimentConfig, test_run: bool = False):
     return results
 
 
-def run_condition_d(config: ExperimentConfig, test_run: bool = False):
+def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False):
     """Condition D: Inserted layers + SFT on frozen base."""
     print("\n" + "=" * 60)
     print("CONDITION D: Inserted Layers + SFT")
     print("=" * 60)
 
-    model, tokenizer = load_base_model(config.model)
+    model, tokenizer = load_base_model(config.model, smoke_test=smoke_test)
 
     # Insert layers and configure trainability
     freeze_base_model(model)
@@ -284,7 +287,7 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False):
         seed=config.seed,
         report_to="wandb" if config.use_wandb else "none",
         run_name="condition_d_inserted_sft",
-        bf16=True,
+        bf16=not smoke_test,
         max_seq_length=config.model.max_seq_length,
     )
 
@@ -312,7 +315,7 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False):
     return results
 
 
-def run_condition_e(config: ExperimentConfig, test_run: bool = False):
+def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False):
     """Condition E: Two-stage training — LoRA first, then inserted layers.
 
     Stage 1: Train LoRA adapters via GRPO to acquire reasoning capability.
@@ -332,7 +335,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False):
     # Stage 1: LoRA + GRPO (fast acquisition)
     # ──────────────────────────────────────────────
     print("\n--- Stage 1: LoRA + GRPO ---")
-    model, tokenizer = load_base_model(config.model)
+    model, tokenizer = load_base_model(config.model, smoke_test=smoke_test)
 
     lora_config = LoraConfig(
         r=two_stage.lora_rank,
@@ -363,7 +366,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False):
         seed=config.seed,
         report_to="wandb" if config.use_wandb else "none",
         run_name="condition_e_stage1_lora",
-        bf16=True,
+        bf16=not smoke_test,
     )
 
     trainer = GRPOTrainer(
@@ -430,7 +433,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False):
         seed=config.seed,
         report_to="wandb" if config.use_wandb else "none",
         run_name="condition_e_stage2_inserted",
-        bf16=True,
+        bf16=not smoke_test,
     )
 
     trainer_s2 = GRPOTrainer(
@@ -493,6 +496,10 @@ def main():
         help="Quick test: 10 training steps, 50 eval samples",
     )
     parser.add_argument(
+        "--smoke-test", action="store_true",
+        help="Local CPU smoke test: tiny model, no GPU required (implies --test-run)",
+    )
+    parser.add_argument(
         "--output-dir", type=str, default="./results",
         help="Base directory for outputs",
     )
@@ -510,9 +517,19 @@ def main():
     )
     args = parser.parse_args()
 
+    # --smoke-test implies --test-run
+    if args.smoke_test:
+        args.test_run = True
+
     config = ExperimentConfig()
     config.output_dir = args.output_dir
     config.use_wandb = not args.no_wandb
+
+    if args.smoke_test:
+        config.model.name = "HuggingFaceTB/SmolLM-135M"
+        config.model.quantize_4bit = False
+        config.use_wandb = False
+        print("SMOKE TEST: using SmolLM-135M on CPU (no GPU required)")
 
     seeds = [int(s.strip()) for s in args.seeds.split(",")] if args.seeds else [args.seed]
 
@@ -534,7 +551,7 @@ def main():
             print(f"\n{'#'*60}")
             print(f"Running with seed={seed}")
             print(f"{'#'*60}")
-        results = condition_fn(config, test_run=args.test_run)
+        results = condition_fn(config, test_run=args.test_run, smoke_test=args.smoke_test)
         all_results.append(results)
 
     if len(seeds) > 1:

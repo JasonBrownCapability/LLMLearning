@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class ModelConfig:
-    name: str = "meta-llama/Meta-Llama-3-8B"
+    name: str = "meta-llama/Llama-3.1-8B"
     quantize_4bit: bool = True
     dtype: str = "bfloat16"
     max_seq_length: int = 1024

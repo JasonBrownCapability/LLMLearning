@@ -9,7 +9,7 @@ See `RL-Through-Inserted-Layers.md` for the full research document and `Experime
 - **Python** 3.10+
 - **CUDA** 11.8+ with a compatible GPU
 - **GPU**: Minimum 1x A100 80GB (or 2x A6000 48GB). For test runs, a 24GB GPU may work.
-- **HuggingFace account** with access to Llama 3 8B (request access at https://huggingface.co/meta-llama/Meta-Llama-3-8B)
+- **HuggingFace account** with access to Llama 3.1 8B (request access at https://huggingface.co/meta-llama/Llama-3.1-8B)
 - **Weights & Biases account** (optional, for logging)
 
 ## Setup
@@ -35,7 +35,7 @@ pip install -r requirements.txt
 huggingface-cli login
 ```
 
-Enter your HuggingFace token when prompted. You need this to download Llama 3 8B.
+Enter your HuggingFace token when prompted. You need this to download Llama 3.1 8B.
 
 ### 4. (Optional) Log in to Weights & Biases
 
@@ -49,13 +49,27 @@ Or pass `--no-wandb` to all commands to skip logging.
 
 All conditions are run via the same script. Run from the project root directory (`LLMLearning/`).
 
-### Quick test (verify everything works)
+### Local smoke test (no GPU required)
+
+```bash
+python -m experiment.train --condition a --smoke-test
+```
+
+This uses a tiny model (SmolLM-135M) on CPU to verify imports, config, data pipeline, and training loop wiring without needing a GPU. Run this locally before deploying to a cloud GPU to catch setup issues for free.
+
+You can smoke-test any condition:
+
+```bash
+python -m experiment.train --condition c --smoke-test   # tests insert + train + eval
+```
+
+### Quick test on GPU (verify everything works)
 
 ```bash
 python -m experiment.train --condition a --test-run --no-wandb
 ```
 
-This loads the model, runs evaluation on 50 GSM8K examples, and exits. Should complete in a few minutes and confirms your setup is correct.
+This loads the full Llama 3.1 8B model, runs evaluation on 50 GSM8K examples, and exits. Requires a GPU. Should complete in a few minutes and confirms your GPU setup is correct.
 
 ### Condition A: Baseline
 
@@ -184,7 +198,7 @@ All hyperparameters are in `experiment/config.py`. Key settings:
 
 ### Model download fails
 
-- Confirm you have accepted the Llama 3 licence at https://huggingface.co/meta-llama/Meta-Llama-3-8B
+- Confirm you have accepted the Llama 3 licence at https://huggingface.co/meta-llama/Llama-3.1-8B
 - Confirm `huggingface-cli login` succeeded
 - Try setting `HF_TOKEN` environment variable directly
 
