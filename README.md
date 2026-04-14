@@ -1,6 +1,22 @@
 # RL Through Inserted Transformer Layers — Experiment
 
-This experiment tests whether Reinforcement Learning through newly-inserted transformer layers (adding serial computational depth) produces better reasoning improvements than RL through LoRA (modifying existing computations), when both operate on a frozen base model.
+## Executive Summary
+
+When you want to teach an LLM new skills (like math reasoning), the standard approach is **LoRA**: attach small adapter weights to every existing layer, tweaking how the model already thinks. This experiment tests an alternative: **inserting brand new layers** into the middle of the model. The existing 32 layers are frozen completely and only the 2 new layers learn, giving the model extra "thinking steps" rather than changing existing ones.
+
+**The core question:** Which learns reasoning better — modifying existing computations (LoRA) or adding new computational depth (inserted layers)?
+
+Both approaches are trained on the same math problems using the same reinforcement learning method (GRPO), with roughly the same number of trainable parameters (~500M) for a fair comparison. Five conditions isolate the key variables:
+
+| Condition | What it does | Why |
+|-----------|-------------|-----|
+| **A** | No training — evaluate the base model as-is | Establishes baseline performance |
+| **B** | LoRA + RL | The standard approach (main comparison) |
+| **C** | Inserted layers + RL | The core hypothesis |
+| **D** | Inserted layers + supervised learning | Does RL specifically matter, or would any training method work? |
+| **E** | LoRA first, then inserted layers | Does strengthening the base model first help the new layers learn? |
+
+The intuition is that inserted layers add *serial depth* (more sequential processing steps), which might be better for step-by-step reasoning than LoRA's *parallel modifications* across existing layers.
 
 See `RL-Through-Inserted-Layers.md` for the full research document and `Experiment-Design.md` for the experimental design rationale.
 
