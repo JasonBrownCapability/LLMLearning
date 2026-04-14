@@ -42,6 +42,6 @@ With 3 seeds for conditions A/B/C and single runs for D/E:
 
 - **Smoke-test locally first** — run `python -m experiment.train --condition c --smoke-test` on your local machine (no GPU needed). This uses a tiny model on CPU to verify imports, data pipeline, and training loop wiring before you start paying for GPU time.
 - **Run conditions sequentially, not in parallel** — stop the instance between runs if you're stepping away to avoid paying for idle time.
-- **Use persistent volumes** — attach a volume for `/results` and model cache (`~/.cache/huggingface`). Downloading Llama 3.1 8B takes 15-20 min; caching it saves that on every restart.
+- **Use persistent volumes** — attach a Network Volume (50GB) and set `export HF_HOME=/workspace/.cache/huggingface` plus `--output-dir /workspace/results`. Downloading Llama 3.1 8B takes 15-20 min; caching it saves that on every restart. See README setup step 5 for details.
 - **Run A first** as a smoke test (1 hour, confirms setup), then B and C (the core comparison), then decide on D and E based on results.
 - **Spot instances are fine for Condition A** (short run, easy to restart) but consider on-demand for the 10-14 hour training runs (B, C) to avoid mid-run preemption.

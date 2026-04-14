@@ -45,6 +45,20 @@ wandb login
 
 Or pass `--no-wandb` to all commands to skip logging.
 
+### 5. (RunPod) Set up persistent storage
+
+When running on RunPod, attach a **Network Volume** (50GB is sufficient) to preserve downloaded models and results across pod restarts. The volume mounts at `/workspace` by default.
+
+```bash
+# Cache HuggingFace models on the persistent volume
+export HF_HOME=/workspace/.cache/huggingface
+
+# Create a results directory on the persistent volume
+mkdir -p /workspace/results
+```
+
+Then pass `--output-dir /workspace/results` to all training commands. Without this, downloaded models (~16GB) must be re-downloaded on every restart, and results are lost if the pod stops.
+
 ## Running the Experiment
 
 All conditions are run via the same script. Run from the project root directory (`LLMLearning/`).
