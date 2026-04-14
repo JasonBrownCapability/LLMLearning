@@ -53,7 +53,12 @@ def load_math_test():
     ])
 
     def format_math(example):
-        example["prompt"] = MATH_PROMPT_TEMPLATE.format(problem=example["problem"])
+        example["prompt"] = (
+            "Solve the following math problem step by step. "
+            "Show your reasoning, then give your final answer in \\boxed{}.\n\n"
+            "Problem: " + example["problem"] + "\n\n"
+            "Solution:"
+        )
         return example
 
     return dataset.map(format_math)
