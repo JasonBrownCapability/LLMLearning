@@ -77,7 +77,7 @@ Estimated time: 8-12 hours on 1x A100.
 
 ### Condition C: Inserted Layers + GRPO
 
-**This is the core experiment.** Insert 2 new transformer layers (zero-initialised as no-ops) and train them via GRPO.
+**This is the core experiment.** Insert 2 new transformer layers (small-random-initialised, near-zero effect) and train them via GRPO.
 
 ```bash
 python -m experiment.train --condition c
@@ -95,9 +95,9 @@ python -m experiment.train --condition d
 
 Estimated time: 4-6 hours on 1x A100.
 
-### Condition E: Two-Stage CLS Pipeline
+### Condition E: Two-Stage (LoRA then Inserted Layers)
 
-The full CLS-inspired pipeline: LoRA fast acquisition, then consolidation into inserted layers via GRPO.
+Two-stage training: LoRA via GRPO first (to strengthen the base), then merge LoRA into base weights and train inserted layers via GRPO on the improved model.
 
 ```bash
 python -m experiment.train --condition e
@@ -121,14 +121,17 @@ Results are saved to `./results/` (or the directory specified via `--output-dir`
 ```
 results/
   condition_a_baseline/
-    gsm8k_results.json     # Per-example results
-    summary.json            # Accuracy metrics
+    gsm8k_results.json     # Per-example GSM8K results
+    math_results.json      # Per-example MATH results
+    summary.json            # Accuracy metrics (all benchmarks)
   condition_b_lora_rl/
     gsm8k_results.json
+    math_results.json
     summary.json
     adapter_model/          # Saved LoRA weights
   condition_c_inserted_rl/
     gsm8k_results.json
+    math_results.json
     summary.json
     inserted_layers.pt      # Saved inserted layer weights
   ...
@@ -146,6 +149,16 @@ cat results/condition_c_inserted_rl/summary.json
 
 The key comparison is **B vs C** (LoRA+RL vs Inserted Layers+RL) on GSM8K pass@1.
 
+## Multi-Seed Runs
+
+For more robust results, run with multiple seeds and get aggregated statistics:
+
+```bash
+python -m experiment.train --condition c --seeds 42,123,456
+```
+
+This runs the condition once per seed and reports mean ± std across all runs.
+
 ## Configuration
 
 All hyperparameters are in `experiment/config.py`. Key settings:
@@ -154,6 +167,7 @@ All hyperparameters are in `experiment/config.py`. Key settings:
 |---|---|---|
 | `InsertedLayerConfig.positions` | [10, 21] | Where to insert layers (0-indexed) |
 | `InsertedLayerConfig.num_layers` | 2 | Number of layers to insert |
+| `InsertedLayerConfig.init_strategy` | "small_random" | Near-zero init for gradient flow ("zero" available for ablation) |
 | `LoRAConfig.rank` | 64 | LoRA rank (~500M params to match inserted layers) |
 | `GRPOConfig.max_steps` | 2000 | Training steps (~1 epoch on GSM8K) |
 | `GRPOConfig.num_rollouts` | 8 | Completions per prompt for GRPO |
@@ -176,10 +190,10 @@ All hyperparameters are in `experiment/config.py`. Key settings:
 
 ### Training loss not decreasing (Condition C)
 
-This is expected for the first ~100-200 steps due to zero-initialised output projections (tiny gradients). If still flat after 500 steps:
-- Try `init_strategy = "small_random"` in `InsertedLayerConfig`
-- Increase learning rate to 5e-5
-- Check gradient norms in wandb logs
+With the default `small_random` init, gradients should flow from step 1. If loss is flat after 500 steps:
+- Check gradient norm logs in wandb (`grad_norm/inserted_mean`, `grad_norm/inserted_max`)
+- If gradient norms are very small, increase learning rate to 5e-5
+- If gradient norms are normal but loss is flat, the reward signal may be too sparse — check what fraction of rollouts get non-zero reward
 
 ### Slow evaluation
 

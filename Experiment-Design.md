@@ -51,7 +51,7 @@ Rationale:
 - 8B is small enough for a single GPU with quantisation but large enough to have meaningful reasoning capability to build on
 - Using the base model (not instruct) avoids confounding with prior RLHF/DPO alignment
 
-**Quantisation**: Frozen base in 4-bit (NF4 via bitsandbytes). Inserted layers in full fp16 precision.
+**Quantisation**: Frozen base in 4-bit (NF4 via bitsandbytes). Inserted layers in full bfloat16 precision.
 
 ---
 
@@ -74,21 +74,18 @@ Each inserted layer is a standard transformer decoder layer matching the base mo
 - RMSNorm (pre-norm, matching Llama architecture)
 - Rotary position embeddings (shared with base model)
 
-### 4.3 No-Op Initialisation
+### 4.3 Initialisation
 
 For each inserted layer:
 - Self-attention Q, K, V projections: initialised from Kaiming normal (standard)
-- Self-attention output projection (O): **initialised to zero**
+- Self-attention output projection (O): **initialised from small random values** (N(0, 0.01))
 - FFN up/gate projections: initialised from Kaiming normal
-- FFN down projection: **initialised to zero**
+- FFN down projection: **initialised from small random values** (N(0, 0.01))
 - RMSNorm: initialised to ones (standard)
 
-With O and down projections at zero, the self-attention and FFN sub-layers both produce zero output. The residual connection passes the input through unchanged:
-```
-output = input + 0 + 0 = input
-```
+The default strategy is `small_random` — output projections start near-zero so the inserted layers initially have minimal effect on model output, but gradients can flow from the start. This avoids the gradient starvation problem that exact zero-init causes (where output projections produce zero gradients for all internal parameters).
 
-**Verification step**: Before any training, run the modified model on the full GSM8K test set and confirm performance matches the unmodified base model exactly (within floating-point tolerance).
+An alternative `zero` init strategy is available for ablation, which produces an exact no-op (`output = input + 0 + 0 = input`) but at the cost of very slow initial learning.
 
 ---
 
@@ -149,8 +146,8 @@ GRPO avoids the need for a separate critic/value model (unlike PPO), reducing me
 
 **Condition E (Two-Stage)**:
 - Stage 1: Train a LoRA r=32 via GRPO on GSM8K for 1000 steps
-- Stage 2: With the trained LoRA attached, generate 50K rollouts on GSM8K, scored by correctness. Then detach the LoRA, and train the inserted layers via GRPO using these rollouts as the training distribution (on-policy generation from the LoRA-augmented model, off-policy training of the inserted layers). Train for 1000 steps.
-- Stage 3: Evaluate with LoRA detached — does performance hold?
+- Stage 2: Merge the trained LoRA into base weights permanently. Insert new layers into the strengthened base model and train them via GRPO for 1000 steps. The LoRA-improved base provides richer rollouts, giving the inserted layers a stronger training signal than cold-start training.
+- Stage 3: Evaluate the final model (merged base + trained inserted layers).
 
 ---
 
@@ -158,13 +155,13 @@ GRPO avoids the need for a separate critic/value model (unlike PPO), reducing me
 
 ### 6.1 Benchmarks
 
-| Benchmark | Type | Size | Purpose |
-|---|---|---|---|
-| **GSM8K test** | Math word problems | 1,319 | In-distribution reasoning |
-| **MATH** | Competition maths | 5,000 | Out-of-distribution difficulty scaling |
-| **ARC-Challenge** | Science reasoning (MC) | 1,172 | Transfer to non-mathematical reasoning |
-| **LogiQA** | Logical reasoning (MC) | 651 (test) | Transfer to formal logical reasoning |
-| **HumanEval** | Code generation | 164 | Transfer to procedural/algorithmic reasoning |
+| Benchmark | Type | Size | Purpose | Status |
+|---|---|---|---|---|
+| **GSM8K test** | Math word problems | 1,319 | In-distribution reasoning | Implemented |
+| **MATH** | Competition maths | 5,000 | Out-of-distribution difficulty scaling | Implemented |
+| **ARC-Challenge** | Science reasoning (MC) | 1,172 | Transfer to non-mathematical reasoning | Planned |
+| **LogiQA** | Logical reasoning (MC) | 651 (test) | Transfer to formal logical reasoning | Planned |
+| **HumanEval** | Code generation | 164 | Transfer to procedural/algorithmic reasoning | Planned |
 
 ### 6.2 Metrics
 
@@ -204,8 +201,8 @@ Test 2 inserted layers at different positions:
 Compare 1, 2, 3, 4 inserted layers (adjusting LoRA rank in condition B to match parameter count each time).
 
 ### 7.3 Initialisation Strategy
-- Zero-init (default)
-- Small random init (output projections from N(0, 0.01))
+- Small random init (default — output projections from N(0, 0.01))
+- Zero-init (exact no-op, but risks gradient starvation)
 - Copy-init (duplicate an existing layer's weights, as in Solar depth up-scaling)
 
 ### 7.4 Reward Complexity
@@ -306,9 +303,9 @@ The CLS-inspired pipeline adds value — LoRA scaffolding makes the optimisation
 
 | Risk | Mitigation |
 |---|---|
-| Zero-init gradient vanishing | Monitor gradient norms during training. If too small after 200 steps, switch to small random init (ablation 7.3) |
+| Small-random init disruption | Monitor gradient norms during training (logged automatically to wandb). If inserted layers perturb the base model too much, reduce `small_random_std` or switch to zero-init |
 | RL training instability | Log reward curves closely. If diverging, reduce learning rate or increase KL penalty |
 | Base model already too good at GSM8K | Check baseline accuracy first. If >60%, switch to MATH as training source (harder, more headroom) |
 | Inserted layers disrupt frozen layers | Monitor base model capability (measure perplexity on a held-out text set) throughout training |
 | Memory overflow on single GPU | Reduce rollout group G from 8 to 4, enable gradient accumulation over 2 steps |
-| Results are noisy / inconclusive | Run each condition 3 times with different random seeds, report mean and standard deviation |
+| Results are noisy / inconclusive | Run each condition with multiple seeds via `--seeds 42,123,456`, which automatically reports mean ± std |

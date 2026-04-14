@@ -13,10 +13,13 @@ Usage:
 
 import argparse
 import os
+import random
 import sys
 
+import numpy as np
 import torch
 from peft import LoraConfig
+from transformers import TrainerCallback
 from trl import GRPOConfig as TRLGRPOConfig, GRPOTrainer, SFTConfig as TRLSFTConfig, SFTTrainer
 
 from .config import ExperimentConfig
@@ -31,6 +34,54 @@ from .model_surgery import (
     verify_noop,
 )
 from .rewards import gsm8k_reward_fn
+
+
+def _set_seed(seed: int):
+    """Set random seed for reproducibility."""
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+class GradientNormCallback(TrainerCallback):
+    """Logs gradient norms split by layer group (inserted vs base)."""
+
+    def __init__(self, model, inserted_indices):
+        self.model = model
+        self.inserted_indices = set(inserted_indices)
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if state.global_step % args.logging_steps != 0:
+            return
+
+        inserted_grad_norms = []
+        base_grad_norms = []
+
+        for idx, layer in enumerate(self.model.model.layers):
+            for name, param in layer.named_parameters():
+                if param.grad is not None:
+                    grad_norm = param.grad.norm().item()
+                    if idx in self.inserted_indices:
+                        inserted_grad_norms.append(grad_norm)
+                    else:
+                        base_grad_norms.append(grad_norm)
+
+        logs = {}
+        if inserted_grad_norms:
+            logs["grad_norm/inserted_mean"] = sum(inserted_grad_norms) / len(inserted_grad_norms)
+            logs["grad_norm/inserted_max"] = max(inserted_grad_norms)
+        if base_grad_norms:
+            logs["grad_norm/base_mean"] = sum(base_grad_norms) / len(base_grad_norms)
+            logs["grad_norm/base_max"] = max(base_grad_norms)
+
+        if logs:
+            try:
+                import wandb
+                if wandb.run is not None:
+                    wandb.log(logs, step=state.global_step)
+            except ImportError:
+                pass
 
 
 def run_condition_a(config: ExperimentConfig, test_run: bool = False):
@@ -178,6 +229,7 @@ def run_condition_c(config: ExperimentConfig, test_run: bool = False):
         args=grpo_config,
         train_dataset=train_dataset,
         processing_class=tokenizer,
+        callbacks=[GradientNormCallback(model, inserted_indices)],
     )
 
     print("\nStarting Inserted Layers + GRPO training...")
@@ -241,6 +293,7 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False):
         args=sft_config,
         train_dataset=train_dataset,
         processing_class=tokenizer,
+        callbacks=[GradientNormCallback(model, inserted_indices)],
     )
 
     print("\nStarting Inserted Layers + SFT training...")
@@ -260,15 +313,15 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False):
 
 
 def run_condition_e(config: ExperimentConfig, test_run: bool = False):
-    """Condition E: Two-stage CLS pipeline.
+    """Condition E: Two-stage training — LoRA first, then inserted layers.
 
-    Stage 1: Train LoRA + GRPO (fast acquisition)
-    Stage 2: Generate rollouts from LoRA-augmented model, then train
-             inserted layers via GRPO (slow consolidation)
-    Stage 3: Remove LoRA and evaluate (consolidation test)
+    Stage 1: Train LoRA adapters via GRPO to acquire reasoning capability.
+    Stage 2: Merge LoRA into base weights, insert new layers, and train
+             the inserted layers via GRPO on the strengthened base model.
+    Stage 3: Evaluate the final model (merged base + trained inserted layers).
     """
     print("\n" + "=" * 60)
-    print("CONDITION E: Two-Stage CLS Pipeline")
+    print("CONDITION E: Two-Stage (LoRA then Inserted Layers)")
     print("=" * 60)
 
     two_stage = config.two_stage
@@ -278,7 +331,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False):
     # ──────────────────────────────────────────────
     # Stage 1: LoRA + GRPO (fast acquisition)
     # ──────────────────────────────────────────────
-    print("\n--- Stage 1: LoRA + GRPO (fast acquisition) ---")
+    print("\n--- Stage 1: LoRA + GRPO ---")
     model, tokenizer = load_base_model(config.model)
 
     lora_config = LoraConfig(
@@ -339,9 +392,9 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False):
     )
 
     # ──────────────────────────────────────────────
-    # Stage 2: Generate rollouts, then train inserted layers
+    # Stage 2: Train inserted layers on LoRA-merged base
     # ──────────────────────────────────────────────
-    print("\n--- Stage 2: Consolidation into inserted layers ---")
+    print("\n--- Stage 2: Inserted Layers + GRPO on LoRA-merged base ---")
 
     # Merge LoRA weights into the base model permanently, then discard
     # the LoRA adapter. The model now has LoRA knowledge baked in.
@@ -386,6 +439,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False):
         args=grpo_config_s2,
         train_dataset=train_dataset,
         processing_class=tokenizer,
+        callbacks=[GradientNormCallback(model, inserted_indices)],
     )
 
     print("Starting Stage 2 training (inserted layers + GRPO)...")
@@ -394,9 +448,9 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False):
     _save_inserted_layers(model, inserted_indices, output_dir)
 
     # ──────────────────────────────────────────────
-    # Stage 3: Evaluate (consolidation test)
+    # Stage 3: Final evaluation
     # ──────────────────────────────────────────────
-    print("\n--- Stage 3: Consolidation evaluation ---")
+    print("\n--- Stage 3: Final evaluation ---")
 
     # The model now has: original base (with LoRA merged) + trained inserted layers.
     # This is the final model — evaluate it.
@@ -448,14 +502,19 @@ def main():
     )
     parser.add_argument(
         "--seed", type=int, default=42,
-        help="Random seed",
+        help="Random seed (used when --seeds is not provided)",
+    )
+    parser.add_argument(
+        "--seeds", type=str, default=None,
+        help="Comma-separated seeds for multi-run aggregation (e.g., --seeds 42,123,456)",
     )
     args = parser.parse_args()
 
     config = ExperimentConfig()
     config.output_dir = args.output_dir
-    config.seed = args.seed
     config.use_wandb = not args.no_wandb
+
+    seeds = [int(s.strip()) for s in args.seeds.split(",")] if args.seeds else [args.seed]
 
     conditions = {
         "a": run_condition_a,
@@ -466,13 +525,36 @@ def main():
     }
 
     condition_fn = conditions[args.condition]
-    results = condition_fn(config, test_run=args.test_run)
+    all_results = []
 
-    print(f"\n{'='*60}")
-    print(f"RESULTS for condition {args.condition.upper()}:")
-    print(f"{'='*60}")
-    for key, value in results.items():
-        print(f"  {key}: {value}")
+    for seed in seeds:
+        config.seed = seed
+        _set_seed(seed)
+        if len(seeds) > 1:
+            print(f"\n{'#'*60}")
+            print(f"Running with seed={seed}")
+            print(f"{'#'*60}")
+        results = condition_fn(config, test_run=args.test_run)
+        all_results.append(results)
+
+    if len(seeds) > 1:
+        print(f"\n{'='*60}")
+        print(f"AGGREGATED RESULTS for condition {args.condition.upper()} "
+              f"across {len(seeds)} seeds:")
+        print(f"{'='*60}")
+        numeric_keys = [k for k in all_results[0]
+                        if isinstance(all_results[0][k], (int, float))]
+        for key in numeric_keys:
+            values = [r[key] for r in all_results]
+            mean = np.mean(values)
+            std = np.std(values)
+            print(f"  {key}: {mean:.4f} +/- {std:.4f}")
+    else:
+        print(f"\n{'='*60}")
+        print(f"RESULTS for condition {args.condition.upper()}:")
+        print(f"{'='*60}")
+        for key, value in all_results[0].items():
+            print(f"  {key}: {value}")
 
 
 if __name__ == "__main__":

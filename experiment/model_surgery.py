@@ -15,14 +15,14 @@ def load_base_model(config: ModelConfig):
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_compute_dtype=torch.bfloat16,
             bnb_4bit_use_double_quant=True,
         )
 
     model = AutoModelForCausalLM.from_pretrained(
         config.name,
         quantization_config=quantization_config,
-        torch_dtype=torch.float16,
+        torch_dtype=torch.bfloat16,
         device_map="auto",
         trust_remote_code=config.trust_remote_code,
     )
@@ -49,7 +49,7 @@ def create_inserted_layer(model, config: InsertedLayerConfig):
 
     # Move to same device/dtype as reference, in full precision for training
     device = next(reference_layer.parameters()).device
-    new_layer = new_layer.to(device=device, dtype=torch.float16)
+    new_layer = new_layer.to(device=device, dtype=torch.bfloat16)
 
     # Reinitialise all parameters
     for name, param in new_layer.named_parameters():

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 class ModelConfig:
     name: str = "meta-llama/Meta-Llama-3-8B"
     quantize_4bit: bool = True
-    dtype: str = "float16"
+    dtype: str = "bfloat16"
     max_seq_length: int = 1024
     trust_remote_code: bool = True
 
@@ -16,7 +16,7 @@ class ModelConfig:
 class InsertedLayerConfig:
     num_layers: int = 2
     positions: list[int] = field(default_factory=lambda: [10, 21])
-    init_strategy: str = "zero"  # "zero", "small_random", "copy"
+    init_strategy: str = "small_random"  # "zero", "small_random", "copy"
     small_random_std: float = 0.01
 
 
@@ -65,10 +65,7 @@ class TwoStageConfig:
     lora_rank: int = 32
     lora_alpha: int = 64
     stage1_max_steps: int = 1000
-    # Rollout generation
-    num_rollouts_to_generate: int = 50000
-    rollout_batch_size: int = 32
-    # Stage 2: Inserted layers + RL
+    # Stage 2: Inserted layers + RL on LoRA-merged base
     stage2_max_steps: int = 1000
 
 

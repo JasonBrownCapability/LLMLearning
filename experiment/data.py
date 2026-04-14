@@ -34,6 +34,25 @@ def _format_gsm8k_example(example):
     return example
 
 
+MATH_PROMPT_TEMPLATE = (
+    "Solve the following math problem step by step. "
+    "Show your reasoning, then give your final answer in \\boxed{}.\n\n"
+    "Problem: {problem}\n\n"
+    "Solution:"
+)
+
+
+def load_math_test():
+    """Load MATH test set for evaluation."""
+    dataset = load_dataset("hendrycks/competition_math", split="test")
+
+    def format_math(example):
+        example["prompt"] = MATH_PROMPT_TEMPLATE.format(problem=example["problem"])
+        return example
+
+    return dataset.map(format_math)
+
+
 def load_gsm8k_sft():
     """Load GSM8K training set formatted for supervised fine-tuning.
 

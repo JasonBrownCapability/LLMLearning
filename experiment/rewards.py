@@ -14,10 +14,20 @@ def extract_gsm8k_answer(text: str) -> float | None:
     if match:
         return _parse_number(match.group(1))
 
-    # Fallback: last number in the text
-    numbers = re.findall(r"[+-]?\d[\d,]*\.?\d*", text)
-    if numbers:
-        return _parse_number(numbers[-1])
+    # Fallback 1: last number on the final non-empty line
+    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+    if lines:
+        last_line_numbers = re.findall(r"[+-]?\d[\d,]*\.?\d*", lines[-1])
+        if last_line_numbers:
+            return _parse_number(last_line_numbers[-1])
+
+    # Fallback 2: number after answer-like keywords
+    answer_match = re.search(
+        r"(?:answer\s+is|equals?|total\s+is|result\s+is|=)\s*([+-]?\d[\d,]*\.?\d*)",
+        text, re.IGNORECASE,
+    )
+    if answer_match:
+        return _parse_number(answer_match.group(1))
 
     return None
 
@@ -56,7 +66,6 @@ def _has_reasoning_steps(text: str) -> bool:
         r"\btherefore\b",
         r"\bwe\s+(need|know|can|get|have)\b",
         r"\blet'?s\b",
-        r"\n",  # Multi-line responses likely show work
     ]
     score = sum(1 for pattern in indicators if re.search(pattern, text, re.IGNORECASE))
     return score >= 2
