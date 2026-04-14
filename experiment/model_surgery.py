@@ -29,6 +29,7 @@ def load_base_model(config: ModelConfig, smoke_test: bool = False):
     tokenizer = AutoTokenizer.from_pretrained(
         config.name,
         trust_remote_code=config.trust_remote_code,
+        padding_side="left",
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
