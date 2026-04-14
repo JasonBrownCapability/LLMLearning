@@ -102,6 +102,7 @@ def run_condition_a(config: ExperimentConfig, test_run: bool = False, smoke_test
         output_dir=config.output_dir,
         condition_name="condition_a_baseline",
         max_samples=max_samples,
+        num_samples_pass_at_k=1 if test_run else 8,
     )
     return results
 
@@ -174,6 +175,7 @@ def run_condition_b(config: ExperimentConfig, test_run: bool = False, smoke_test
         output_dir=config.output_dir,
         condition_name="condition_b_lora_rl",
         max_samples=max_samples,
+        num_samples_pass_at_k=1 if test_run else 8,
     )
     return results
 
@@ -248,6 +250,7 @@ def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test
         output_dir=config.output_dir,
         condition_name="condition_c_inserted_rl",
         max_samples=max_samples,
+        num_samples_pass_at_k=1 if test_run else 8,
     )
     return results
 
@@ -311,6 +314,7 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
         output_dir=config.output_dir,
         condition_name="condition_d_inserted_sft",
         max_samples=max_samples,
+        num_samples_pass_at_k=1 if test_run else 8,
     )
     return results
 
@@ -392,6 +396,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
         output_dir=config.output_dir,
         condition_name="condition_e_stage1_with_lora",
         max_samples=max_samples,
+        num_samples_pass_at_k=1 if test_run else 8,
     )
 
     # ──────────────────────────────────────────────
@@ -463,6 +468,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
         output_dir=config.output_dir,
         condition_name="condition_e_two_stage_final",
         max_samples=max_samples,
+        num_samples_pass_at_k=1 if test_run else 8,
     )
     return results
 

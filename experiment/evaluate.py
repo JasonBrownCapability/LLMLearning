@@ -114,9 +114,8 @@ def evaluate_gsm8k(model, tokenizer, max_samples=None, num_samples_pass_at_k=1,
                 "generated_text": text[:2048],  # Truncate for storage
             })
 
-        if (i // batch_size) % 10 == 0:
-            print(f"  Evaluated {min(i + batch_size, len(dataset))}/{len(dataset)} "
-                  f"(acc so far: {correct_at_1}/{total} = {correct_at_1/max(total,1):.3f})")
+        print(f"  Evaluated {min(i + batch_size, len(dataset))}/{len(dataset)} "
+              f"(acc so far: {correct_at_1}/{total} = {correct_at_1/max(total,1):.3f})")
 
     accuracy_at_1 = correct_at_1 / max(total, 1)
     accuracy_at_k = correct_at_k / max(total, 1)
@@ -211,9 +210,8 @@ def evaluate_math(model, tokenizer, max_samples=None, batch_size=8,
                 "generated_text": text[:2048],
             })
 
-        if (i // batch_size) % 10 == 0:
-            print(f"  MATH: Evaluated {min(i + batch_size, len(dataset))}/{len(dataset)} "
-                  f"(acc so far: {correct}/{total} = {correct/max(total,1):.3f})")
+        print(f"  MATH: Evaluated {min(i + batch_size, len(dataset))}/{len(dataset)} "
+              f"(acc so far: {correct}/{total} = {correct/max(total,1):.3f})")
 
     accuracy = correct / max(total, 1)
     return {
@@ -236,7 +234,7 @@ def run_full_evaluation(model, tokenizer, output_dir, condition_name,
     print(f"{'='*60}")
 
     # GSM8K evaluation
-    print("\nRunning GSM8K evaluation...")
+    print(f"\nRunning GSM8K evaluation (pass@1{f' + pass@{num_samples_pass_at_k}' if num_samples_pass_at_k > 1 else ''})...")
     gsm8k_results = evaluate_gsm8k(
         model, tokenizer,
         max_samples=max_samples,
