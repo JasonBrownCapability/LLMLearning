@@ -22,7 +22,7 @@ def load_base_model(config: ModelConfig, smoke_test: bool = False):
     model = AutoModelForCausalLM.from_pretrained(
         config.name,
         quantization_config=quantization_config,
-        torch_dtype=torch.float32 if smoke_test else torch.bfloat16,
+        dtype=torch.float32 if smoke_test else torch.bfloat16,
         device_map="cpu" if smoke_test else "auto",
         trust_remote_code=config.trust_remote_code,
     )
