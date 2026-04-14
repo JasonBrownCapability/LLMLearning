@@ -1,6 +1,6 @@
 """Dataset loading and prompt formatting for training and evaluation."""
 
-from datasets import load_dataset
+from datasets import concatenate_datasets, load_dataset
 
 
 PROMPT_TEMPLATE = (
@@ -44,7 +44,13 @@ MATH_PROMPT_TEMPLATE = (
 
 def load_math_test():
     """Load MATH test set for evaluation."""
-    dataset = load_dataset("hendrycks/competition_math", split="test")
+    subsets = [
+        "algebra", "counting_and_probability", "geometry",
+        "intermediate_algebra", "number_theory", "prealgebra", "precalculus",
+    ]
+    dataset = concatenate_datasets([
+        load_dataset("EleutherAI/hendrycks_math", s, split="test") for s in subsets
+    ])
 
     def format_math(example):
         example["prompt"] = MATH_PROMPT_TEMPLATE.format(problem=example["problem"])
