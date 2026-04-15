@@ -87,7 +87,7 @@ class GradientNormCallback(TrainerCallback):
                 pass
 
 
-def run_condition_a(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False):
+def run_condition_a(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1):
     """Condition A: Baseline — evaluate the unmodified base model."""
     print("\n" + "=" * 60)
     print("CONDITION A: Baseline (no training)")
@@ -102,12 +102,12 @@ def run_condition_a(config: ExperimentConfig, test_run: bool = False, smoke_test
         output_dir=config.output_dir,
         condition_name="condition_a_baseline",
         max_samples=max_samples,
-        num_samples_pass_at_k=1 if test_run else 8,
+        num_samples_pass_at_k=pass_at_k,
     )
     return results
 
 
-def run_condition_b(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False):
+def run_condition_b(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1):
     """Condition B: LoRA + GRPO on frozen base."""
     print("\n" + "=" * 60)
     print("CONDITION B: LoRA + GRPO")
@@ -175,12 +175,12 @@ def run_condition_b(config: ExperimentConfig, test_run: bool = False, smoke_test
         output_dir=config.output_dir,
         condition_name="condition_b_lora_rl",
         max_samples=max_samples,
-        num_samples_pass_at_k=1 if test_run else 8,
+        num_samples_pass_at_k=pass_at_k,
     )
     return results
 
 
-def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False):
+def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1):
     """Condition C: Inserted layers + GRPO on frozen base."""
     print("\n" + "=" * 60)
     print("CONDITION C: Inserted Layers + GRPO")
@@ -250,12 +250,12 @@ def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test
         output_dir=config.output_dir,
         condition_name="condition_c_inserted_rl",
         max_samples=max_samples,
-        num_samples_pass_at_k=1 if test_run else 8,
+        num_samples_pass_at_k=pass_at_k,
     )
     return results
 
 
-def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False):
+def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1):
     """Condition D: Inserted layers + SFT on frozen base."""
     print("\n" + "=" * 60)
     print("CONDITION D: Inserted Layers + SFT")
@@ -314,12 +314,12 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
         output_dir=config.output_dir,
         condition_name="condition_d_inserted_sft",
         max_samples=max_samples,
-        num_samples_pass_at_k=1 if test_run else 8,
+        num_samples_pass_at_k=pass_at_k,
     )
     return results
 
 
-def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False):
+def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1):
     """Condition E: Two-stage training — LoRA first, then inserted layers.
 
     Stage 1: Train LoRA adapters via GRPO to acquire reasoning capability.
@@ -396,7 +396,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
         output_dir=config.output_dir,
         condition_name="condition_e_stage1_with_lora",
         max_samples=max_samples,
-        num_samples_pass_at_k=1 if test_run else 8,
+        num_samples_pass_at_k=pass_at_k,
     )
 
     # ──────────────────────────────────────────────
@@ -468,7 +468,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
         output_dir=config.output_dir,
         condition_name="condition_e_two_stage_final",
         max_samples=max_samples,
-        num_samples_pass_at_k=1 if test_run else 8,
+        num_samples_pass_at_k=pass_at_k,
     )
     return results
 
@@ -521,6 +521,10 @@ def main():
         "--seeds", type=str, default=None,
         help="Comma-separated seeds for multi-run aggregation (e.g., --seeds 42,123,456)",
     )
+    parser.add_argument(
+        "--pass-at-k", type=int, default=1,
+        help="Number of sampled generations for pass@k metric (default: 1, use 8 for pass@8)",
+    )
     args = parser.parse_args()
 
     # --smoke-test implies --test-run
@@ -557,7 +561,7 @@ def main():
             print(f"\n{'#'*60}")
             print(f"Running with seed={seed}")
             print(f"{'#'*60}")
-        results = condition_fn(config, test_run=args.test_run, smoke_test=args.smoke_test)
+        results = condition_fn(config, test_run=args.test_run, smoke_test=args.smoke_test, pass_at_k=args.pass_at_k)
         all_results.append(results)
 
     if len(seeds) > 1:
