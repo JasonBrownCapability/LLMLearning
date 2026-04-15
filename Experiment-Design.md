@@ -224,9 +224,30 @@ Instead of freezing *all* base layers when training inserted layers (as in condi
 
 **Trade-off**: This increases the trainable parameter count significantly (~12 base layers + 2 inserted layers vs just 2 inserted layers), which muddies the comparison with condition B. To maintain a fair parameter budget comparison, the LoRA rank in condition B would need to be increased to match, or this condition should be interpreted as testing a different question: *does the benefit of inserted layers increase when nearby layers can co-adapt?*
 
-### 8.2 Condition G: Layer-wise LoRA Distillation into Inserted Layers
+### 8.2 Condition G: LoRA Distillation into Inserted Layers
 
-Rather than training inserted layers via RL from scratch, distill the knowledge from a trained LoRA model directly into the inserted layers using supervised regression on internal representations.
+Rather than training inserted layers via RL from scratch, distill the knowledge from a trained LoRA model directly into the inserted layers. Two variants, in order of preference:
+
+#### Variant 1: End-to-end distillation (recommended)
+
+Train the inserted layers so that the model's *final output* matches the LoRA model's output, letting backpropagation figure out what the inserted layers should do.
+
+**Process**:
+1. Start with the trained LoRA model from condition B (the "teacher")
+2. Create a second model: base model (no LoRA) with inserted layers at positions 10 and 21 (the "student")
+3. Freeze everything in the student except the inserted layers
+4. For each batch of training inputs:
+   - Forward pass through the teacher → get output logits
+   - Forward pass through the student → get output logits
+   - Loss = KL divergence between teacher and student logits
+   - Backpropagate through the student's frozen layers to update only the inserted layers
+5. The inserted layers learn to replicate the *cumulative effect* of all 32 LoRA adapters, not just the local change at one point
+
+**Why this is better than layer-wise**: Each LoRA adapter's change is small individually, but they compound through the residual stream. An inserted layer at position 10 needs to account for what LoRA would have done across layers 10-32 collectively. End-to-end distillation lets the gradient computation handle this automatically — the inserted layer learns what produces the best overall match, not just a local approximation.
+
+#### Variant 2: Layer-wise distillation
+
+A simpler but less powerful approach — train each inserted layer to match the LoRA's effect at that specific point in the network.
 
 **Process**:
 1. Start with the trained LoRA model from condition B
@@ -237,13 +258,13 @@ Rather than training inserted layers via RL from scratch, distill the knowledge 
    - Train the inserted layer to reproduce that *difference* — the delta between the LoRA-modified layer's output and the base layer's output
 3. The inserted layer now approximates what LoRA learned at that specific point in the network
 
-**Why this is interesting**:
-- Much faster than GRPO training (supervised regression on cached activations, no rollout generation needed)
+**Why this is interesting** (both variants):
+- Much faster than GRPO training (forward passes + backprop through frozen layers, no rollout generation needed)
 - If it works, it proves that distributed LoRA knowledge can be compressed into serial depth
 - Could be a practical method for converting LoRA adapters into permanent architectural modifications
 - Comparing G vs C reveals whether RL exploration or LoRA distillation is a better training signal for inserted layers
 
-**Limitation**: Two inserted layers may not have enough capacity to replicate what LoRA changes across all 32 layers. The LoRA modifications are distributed, and compressing them into 2 points loses information. Measuring how much accuracy is retained vs lost would itself be informative.
+**Limitation**: Two inserted layers may not have enough capacity to replicate what 32 LoRA-modified layers do collectively. Measuring how much accuracy is retained vs lost would itself be informative — it tells us how much of LoRA's learned behavior is "compressible" into serial depth.
 
 ---
 
