@@ -39,7 +39,7 @@ def load_base_model(config: ModelConfig, smoke_test: bool = False):
     return model, tokenizer
 
 
-def create_inserted_layer(model, config: InsertedLayerConfig):
+def create_inserted_layer(model, config: InsertedLayerConfig, layer_idx: int = 0):
     """Create a new transformer layer matching the base model's architecture.
 
     The layer is initialised as a no-op: output projections of both self-attention
@@ -48,8 +48,8 @@ def create_inserted_layer(model, config: InsertedLayerConfig):
     # Create a fresh layer from the model's config (not deepcopy, which
     # breaks with 4-bit quantized params that can't be converted to float)
     device = next(model.parameters()).device
-    dtype = torch.bfloat16 if model.config.quantization_config else next(model.parameters()).dtype
-    new_layer = LlamaDecoderLayer(model.config, layer_idx=0).to(device=device, dtype=dtype)
+    dtype = torch.bfloat16 if getattr(model.config, 'quantization_config', None) else next(model.parameters()).dtype
+    new_layer = LlamaDecoderLayer(model.config, layer_idx=layer_idx).to(device=device, dtype=dtype)
 
     # Reinitialise all parameters
     for name, param in new_layer.named_parameters():
@@ -101,12 +101,15 @@ def insert_layers(model, config: InsertedLayerConfig):
     # the positions of later ones
     for offset, pos in enumerate(sorted(config.positions)):
         adjusted_pos = pos + offset  # Account for previously inserted layers
-        new_layer = create_inserted_layer(model, config)
+        new_layer = create_inserted_layer(model, config, layer_idx=adjusted_pos)
         layers.insert(adjusted_pos, new_layer)
         inserted_indices.append(adjusted_pos)
 
-    # Update model config to reflect new layer count
+    # Update model config and layer indices to reflect new layer count
     model.config.num_hidden_layers = len(layers)
+    # Fix layer_idx for all layers after insertion so KV-cache slots are correct
+    for i, layer in enumerate(layers):
+        layer.self_attn.layer_idx = i
 
     print(f"Inserted {config.num_layers} layers at positions {inserted_indices}")
     print(f"Model now has {len(layers)} total layers")
