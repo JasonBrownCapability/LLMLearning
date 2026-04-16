@@ -16,7 +16,7 @@ class ModelConfig:
 class InsertedLayerConfig:
     num_layers: int = 2
     positions: list[int] = field(default_factory=lambda: [10, 21])
-    init_strategy: str = "small_random"  # "zero", "small_random", "copy"
+    init_strategy: str = "zero"  # "zero", "small_random", "copy"
     small_random_std: float = 0.01
 
 
