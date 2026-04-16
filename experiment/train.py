@@ -228,6 +228,10 @@ def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test
         bf16=not smoke_test,
     )
 
+    # Tell the trainer this quantized model has trainable components
+    # (inserted layers are non-quantized and trainable, but aren't PEFT adapters)
+    model._hf_peft_config_loaded = True
+
     trainer = GRPOTrainer(
         model=model,
         reward_funcs=gsm8k_reward_fn,
@@ -293,6 +297,9 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
         bf16=not smoke_test,
         max_seq_length=config.model.max_seq_length,
     )
+
+    # Tell the trainer this quantized model has trainable components
+    model._hf_peft_config_loaded = True
 
     trainer = SFTTrainer(
         model=model,
@@ -440,6 +447,9 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
         run_name="condition_e_stage2_inserted",
         bf16=not smoke_test,
     )
+
+    # Tell the trainer this quantized model has trainable components
+    model._hf_peft_config_loaded = True
 
     trainer_s2 = GRPOTrainer(
         model=model,
