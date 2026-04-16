@@ -208,10 +208,14 @@ def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test
     max_steps = 10 if test_run else config.grpo.max_steps
     output_dir = os.path.join(config.output_dir, "condition_c_inserted_rl")
 
+    # Lower learning rate for inserted layers — all gradient is concentrated
+    # in 2 layers instead of distributed across 32 LoRA adapters
+    inserted_lr = config.grpo.learning_rate / 10  # 1e-6 vs 1e-5
+
     grpo_config = TRLGRPOConfig(
         output_dir=output_dir,
         num_generations=config.grpo.num_rollouts,
-        learning_rate=config.grpo.learning_rate,
+        learning_rate=inserted_lr,
         warmup_steps=config.grpo.warmup_steps,
         max_steps=max_steps,
         per_device_train_batch_size=config.grpo.per_device_train_batch_size,
@@ -281,9 +285,11 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
     max_steps = 10 if test_run else config.sft.max_steps
     output_dir = os.path.join(config.output_dir, "condition_d_inserted_sft")
 
+    inserted_lr = config.sft.learning_rate / 10
+
     sft_config = TRLSFTConfig(
         output_dir=output_dir,
-        learning_rate=config.sft.learning_rate,
+        learning_rate=inserted_lr,
         warmup_steps=config.sft.warmup_steps,
         max_steps=max_steps,
         per_device_train_batch_size=config.sft.per_device_train_batch_size,
@@ -428,10 +434,12 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
     # providing a richer training signal for the inserted layers.
     stage2_steps = 10 if test_run else two_stage.stage2_max_steps
 
+    inserted_lr = config.grpo.learning_rate / 10
+
     grpo_config_s2 = TRLGRPOConfig(
         output_dir=os.path.join(output_dir, "stage2_inserted"),
         num_generations=config.grpo.num_rollouts,
-        learning_rate=config.grpo.learning_rate,
+        learning_rate=inserted_lr,
         warmup_steps=50,
         max_steps=stage2_steps,
         per_device_train_batch_size=config.grpo.per_device_train_batch_size,
