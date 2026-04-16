@@ -48,9 +48,11 @@ def create_inserted_layer(model, config: InsertedLayerConfig):
     reference_layer = model.model.layers[0]
     new_layer = copy.deepcopy(reference_layer)
 
-    # Move to same device/dtype as reference
+    # Move to same device as reference, in bfloat16 for training
+    # (base model may be quantized to uint8, but inserted layers need a trainable dtype)
     ref_param = next(reference_layer.parameters())
-    new_layer = new_layer.to(device=ref_param.device, dtype=ref_param.dtype)
+    dtype = ref_param.dtype if ref_param.dtype.is_floating_point else torch.bfloat16
+    new_layer = new_layer.to(device=ref_param.device, dtype=dtype)
 
     # Reinitialise all parameters
     for name, param in new_layer.named_parameters():
