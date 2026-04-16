@@ -4,6 +4,7 @@ import copy
 import torch
 import torch.nn as nn
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers.models.llama.modeling_llama import LlamaDecoderLayer
 
 from .config import ModelConfig, InsertedLayerConfig
 
@@ -44,15 +45,11 @@ def create_inserted_layer(model, config: InsertedLayerConfig):
     The layer is initialised as a no-op: output projections of both self-attention
     and FFN are set to zero, so the residual connection passes input through unchanged.
     """
-    # Get a reference layer to copy architecture from
-    reference_layer = model.model.layers[0]
-    new_layer = copy.deepcopy(reference_layer)
-
-    # Move to same device as reference, in bfloat16 for training
-    # (base model may be quantized to uint8, but inserted layers need a trainable dtype)
-    ref_param = next(reference_layer.parameters())
-    dtype = ref_param.dtype if ref_param.dtype.is_floating_point else torch.bfloat16
-    new_layer = new_layer.to(device=ref_param.device, dtype=dtype)
+    # Create a fresh layer from the model's config (not deepcopy, which
+    # breaks with 4-bit quantized params that can't be converted to float)
+    device = next(model.parameters()).device
+    dtype = torch.bfloat16 if model.config.quantization_config else next(model.parameters()).dtype
+    new_layer = LlamaDecoderLayer(model.config, layer_idx=0).to(device=device, dtype=dtype)
 
     # Reinitialise all parameters
     for name, param in new_layer.named_parameters():
