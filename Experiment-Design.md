@@ -149,6 +149,8 @@ GRPO avoids the need for a separate critic/value model (unlike PPO), reducing me
 - Stage 2: Merge the trained LoRA into base weights permanently. Insert new layers into the strengthened base model and train them via GRPO for 1000 steps. The LoRA-improved base provides richer rollouts, giving the inserted layers a stronger training signal than cold-start training.
 - Stage 3: Evaluate the final model (merged base + trained inserted layers).
 
+> **Note (based on early results):** Condition D showed that SFT outperforms RL for inserted layer training (54% vs 50% on GSM8K), while training ~50x faster. Consider running an E variant where stage 2 uses SFT instead of GRPO — the LoRA-improved base model would provide high-quality reasoning traces for the inserted layers to learn from via supervised training, potentially combining the benefits of both the richer training signal and the more effective training method.
+
 ---
 
 ## 6. Evaluation
