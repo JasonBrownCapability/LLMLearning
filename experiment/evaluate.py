@@ -108,7 +108,7 @@ def evaluate_gsm8k(model, tokenizer, max_samples=None, num_samples_pass_at_k=1,
             total += 1
 
             results.append({
-                "question": batch["question"][j],
+                "question": batch["prompt"][j],
                 "true_answer": true_answer,
                 "predicted_answer": predicted,
                 "correct": is_correct,
