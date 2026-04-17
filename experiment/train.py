@@ -429,9 +429,9 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
         model = model.merge_and_unload()
 
     # ──────────────────────────────────────────────
-    # Stage 2: Train inserted layers on LoRA-merged base
+    # Stage 2: Train inserted layers on LoRA-merged base via SFT
     # ──────────────────────────────────────────────
-    print("\n--- Stage 2: Inserted Layers + GRPO on LoRA-merged base ---")
+    print("\n--- Stage 2: Inserted Layers + SFT on LoRA-merged base ---")
 
     # Now insert layers into the LoRA-merged model
     freeze_base_model(model)
@@ -440,48 +440,44 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
     verify_noop(model, tokenizer, inserted_indices)
     print_model_summary(model)
 
-    # Train inserted layers via GRPO
+    # Train inserted layers via SFT
     # The model now has LoRA knowledge baked in, plus fresh inserted layers.
-    # The GRPO rollouts will benefit from the LoRA-learned reasoning,
-    # providing a richer training signal for the inserted layers.
+    # SFT outperforms GRPO for inserted layers (condition D > C) and trains ~50x faster.
     stage2_steps = 10 if test_run else two_stage.stage2_max_steps
 
-    inserted_lr = config.grpo.learning_rate / 10
+    inserted_lr = config.sft.learning_rate / 10
 
-    grpo_config_s2 = TRLGRPOConfig(
+    sft_config_s2 = TRLSFTConfig(
         output_dir=os.path.join(output_dir, "stage2_inserted"),
-        num_generations=config.grpo.num_rollouts,
         learning_rate=inserted_lr,
         warmup_steps=50,
         max_steps=stage2_steps,
-        per_device_train_batch_size=config.grpo.per_device_train_batch_size,
-        gradient_accumulation_steps=config.grpo.gradient_accumulation_steps,
-        gradient_checkpointing=config.grpo.gradient_checkpointing,
-        beta=config.grpo.kl_coef,
-        temperature=config.grpo.temperature,
-        max_completion_length=config.grpo.max_completion_length,
-        logging_steps=config.grpo.logging_steps,
+        per_device_train_batch_size=config.sft.per_device_train_batch_size,
+        gradient_accumulation_steps=config.sft.gradient_accumulation_steps,
+        gradient_checkpointing=config.sft.gradient_checkpointing,
+        logging_steps=config.sft.logging_steps,
         save_steps=stage2_steps + 1,
         save_strategy="no",
         seed=config.seed,
         report_to="wandb" if config.use_wandb else "none",
-        run_name="condition_e_stage2_inserted",
+        run_name="condition_e_stage2_inserted_sft",
         bf16=not smoke_test,
     )
 
     # Tell the trainer this quantized model has trainable components
     model._hf_peft_config_loaded = True
 
-    trainer_s2 = GRPOTrainer(
+    sft_dataset = load_gsm8k_sft()
+
+    trainer_s2 = SFTTrainer(
         model=model,
-        reward_funcs=gsm8k_reward_fn,
-        args=grpo_config_s2,
-        train_dataset=train_dataset,
+        args=sft_config_s2,
+        train_dataset=sft_dataset,
         processing_class=tokenizer,
         callbacks=[GradientNormCallback(model, inserted_indices)],
     )
 
-    print("Starting Stage 2 training (inserted layers + GRPO)...")
+    print("Starting Stage 2 training (inserted layers + SFT)...")
     trainer_s2.train()
 
     _save_inserted_layers(model, inserted_indices, output_dir)
