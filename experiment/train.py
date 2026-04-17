@@ -350,24 +350,34 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
     output_dir = os.path.join(config.output_dir, "condition_e_two_stage")
     os.makedirs(output_dir, exist_ok=True)
 
-    model, tokenizer = load_base_model(config.model, smoke_test=smoke_test)
     train_dataset = load_gsm8k_train()
     max_samples = 50 if test_run else max_eval_samples
 
     if reuse_lora:
         # ──────────────────────────────────────────────
-        # Stage 1 (skipped): Load pre-trained LoRA
+        # Stage 1 (skipped): Load pre-trained LoRA and merge at full precision
         # ──────────────────────────────────────────────
         print(f"\n--- Stage 1: Loading pre-trained LoRA from {reuse_lora} ---")
+        print("Loading base model in bfloat16 (not 4-bit) for clean LoRA merge...")
         from peft import PeftModel
+
+        # Load without quantization so the merge is lossless
+        merge_config = ModelConfig(
+            name=config.model.name,
+            quantize_4bit=False,
+            trust_remote_code=config.model.trust_remote_code,
+        )
+        model, tokenizer = load_base_model(merge_config, smoke_test=smoke_test)
         model = PeftModel.from_pretrained(model, reuse_lora)
-        print("LoRA adapter loaded. Merging into base model...")
+        print("LoRA adapter loaded. Merging into base model at full precision...")
         model = model.merge_and_unload()
+        print("LoRA merged. Model is now in bfloat16 with LoRA knowledge baked in.")
     else:
         # ──────────────────────────────────────────────
         # Stage 1: LoRA + GRPO (fast acquisition)
         # ──────────────────────────────────────────────
         print("\n--- Stage 1: LoRA + GRPO ---")
+        model, tokenizer = load_base_model(config.model, smoke_test=smoke_test)
 
         lora_config = LoraConfig(
             r=two_stage.lora_rank,
@@ -465,7 +475,9 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
     )
 
     # Tell the trainer this quantized model has trainable components
-    model._hf_peft_config_loaded = True
+    # (only needed when model is quantized)
+    if getattr(model, "is_quantized", False):
+        model._hf_peft_config_loaded = True
 
     sft_dataset = load_gsm8k_sft()
 
