@@ -25,7 +25,7 @@ from peft import LoraConfig
 from transformers import TrainerCallback
 from trl import GRPOConfig as TRLGRPOConfig, GRPOTrainer, SFTConfig as TRLSFTConfig, SFTTrainer
 
-from .config import ExperimentConfig
+from .config import ExperimentConfig, ModelConfig
 from .data import load_gsm8k_train, load_gsm8k_sft
 from .evaluate import run_full_evaluation
 from .model_surgery import (
