@@ -41,7 +41,11 @@ def main():
     )
     parser.add_argument(
         "--output-dir", type=str, default="./results",
-        help="Base directory for outputs (same as training)",
+        help="Base directory for saving evaluation results",
+    )
+    parser.add_argument(
+        "--weights-dir", type=str, default=None,
+        help="Directory containing saved weights (default: same as --output-dir)",
     )
     parser.add_argument(
         "--pass-at-k", type=int, default=1,
@@ -57,6 +61,7 @@ def main():
     )
     args = parser.parse_args()
     args.benchmarks = [b.strip() for b in args.benchmarks.split(",")]
+    weights_dir = args.weights_dir or args.output_dir
 
     config = ExperimentConfig()
     config.output_dir = args.output_dir
@@ -69,7 +74,7 @@ def main():
     elif args.condition == "b":
         # LoRA — load base model + saved adapter
         model, tokenizer = load_base_model(config.model)
-        adapter_dir = os.path.join(args.output_dir, "condition_b_lora_rl")
+        adapter_dir = os.path.join(weights_dir, "condition_b_lora_rl")
         print(f"Loading LoRA adapter from {adapter_dir}")
         model = PeftModel.from_pretrained(model, adapter_dir)
         condition_name = "condition_b_lora_rl"
@@ -82,7 +87,7 @@ def main():
         unfreeze_inserted_layers(model, inserted_indices)
 
         weights_path = os.path.join(
-            args.output_dir, "condition_c_inserted_rl", "inserted_layers.pt"
+            weights_dir, "condition_c_inserted_rl", "inserted_layers.pt"
         )
         print(f"Loading inserted layer weights from {weights_path}")
         state_dict = torch.load(weights_path, map_location="cpu")

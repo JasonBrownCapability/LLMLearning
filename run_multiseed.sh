@@ -8,7 +8,8 @@
 set -e
 
 OUTPUT_DIR="/workspace/results_multiseed"
-LORA_PATH="/workspace/results/condition_b_lora_rl"
+WEIGHTS_DIR="/workspace/results"
+LORA_PATH="$WEIGHTS_DIR/condition_b_lora_rl"
 SEEDS="42,123,456"
 mkdir -p $OUTPUT_DIR
 
@@ -31,12 +32,12 @@ python -m experiment.eval_only --condition a --output-dir $OUTPUT_DIR --benchmar
 echo ""
 echo ">>> Condition B: LoRA eval (full dataset)"
 echo "============================================"
-python -m experiment.eval_only --condition b --output-dir $OUTPUT_DIR --benchmarks gsm8k,gsm8k-hard
+python -m experiment.eval_only --condition b --output-dir $OUTPUT_DIR --weights-dir $WEIGHTS_DIR --benchmarks gsm8k,gsm8k-hard
 
 echo ""
 echo ">>> Condition C: Inserted layers + RL eval (full dataset)"
 echo "============================================"
-python -m experiment.eval_only --condition c --output-dir $OUTPUT_DIR --benchmarks gsm8k,gsm8k-hard
+python -m experiment.eval_only --condition c --output-dir $OUTPUT_DIR --weights-dir $WEIGHTS_DIR --benchmarks gsm8k,gsm8k-hard
 
 # ──────────────────────────────────────────────
 # Multi-seed training conditions
