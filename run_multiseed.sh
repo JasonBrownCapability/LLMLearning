@@ -24,15 +24,10 @@ echo "============================================"
 # Eval-only conditions (no training, single seed)
 # ──────────────────────────────────────────────
 
-echo ""
-echo ">>> Condition A: Baseline eval (full dataset)"
-echo "============================================"
-python -m experiment.eval_only --condition a --output-dir $OUTPUT_DIR --benchmarks gsm8k,gsm8k-hard
-
-echo ""
-echo ">>> Condition B: LoRA eval (full dataset)"
-echo "============================================"
-python -m experiment.eval_only --condition b --output-dir $OUTPUT_DIR --weights-dir $WEIGHTS_DIR --benchmarks gsm8k,gsm8k-hard
+# Conditions A and B already completed — skip
+# To re-run, uncomment the lines below:
+# python -m experiment.eval_only --condition a --output-dir $OUTPUT_DIR --benchmarks gsm8k,gsm8k-hard
+# python -m experiment.eval_only --condition b --output-dir $OUTPUT_DIR --weights-dir $WEIGHTS_DIR --benchmarks gsm8k,gsm8k-hard
 
 echo ""
 echo ">>> Condition C: Inserted layers + RL eval (full dataset)"
