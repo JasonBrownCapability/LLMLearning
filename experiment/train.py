@@ -526,15 +526,129 @@ def _save_inserted_layers(model, inserted_indices, output_dir):
     print(f"Saved inserted layer weights to {save_path}")
 
 
+def run_condition_g(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1, max_eval_samples: int = None, reuse_lora: str = None):
+    """Condition G: Distill LoRA knowledge into inserted layers.
+
+    Train inserted layers so the student model's output logits match the
+    teacher (LoRA) model's output logits via KL divergence. No RL needed.
+    """
+    import torch.nn.functional as F
+    from torch.utils.data import DataLoader
+    from peft import PeftModel
+
+    if not reuse_lora:
+        print("ERROR: Condition G requires --reuse-lora to specify the teacher model.")
+        sys.exit(1)
+
+    print("\n" + "=" * 60)
+    print("CONDITION G: LoRA Distillation into Inserted Layers")
+    print("=" * 60)
+
+    output_dir = os.path.join(config.output_dir, "condition_g_distillation")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Load teacher: base + LoRA (4-bit, inference only)
+    print("\nLoading teacher model (base + LoRA)...")
+    teacher_model, tokenizer = load_base_model(config.model, smoke_test=smoke_test)
+    teacher_model = PeftModel.from_pretrained(teacher_model, reuse_lora)
+    teacher_model.eval()
+
+    # Load student: base + inserted layers (4-bit base, bfloat16 inserted layers)
+    print("Loading student model (base + inserted layers)...")
+    student_model, _ = load_base_model(config.model, smoke_test=smoke_test)
+    freeze_base_model(student_model)
+    inserted_indices = insert_layers(student_model, config.inserted_layers)
+    unfreeze_inserted_layers(student_model, inserted_indices)
+    verify_noop(student_model, tokenizer, inserted_indices)
+    print_model_summary(student_model)
+
+    # Prepare training data
+    train_dataset = load_gsm8k_sft()
+    max_steps = 10 if test_run else 2000
+    inserted_lr = config.sft.learning_rate / 10
+    batch_size = config.sft.per_device_train_batch_size
+
+    # Tell the trainer this quantized model has trainable components
+    if getattr(student_model, "is_quantized", False):
+        student_model._hf_peft_config_loaded = True
+
+    optimizer = torch.optim.AdamW(
+        [p for p in student_model.parameters() if p.requires_grad],
+        lr=inserted_lr,
+    )
+
+    print(f"\nStarting distillation training ({max_steps} steps, lr={inserted_lr})...")
+    student_model.train()
+    step = 0
+    total_loss = 0
+
+    while step < max_steps:
+        for i in range(0, len(train_dataset), batch_size):
+            if step >= max_steps:
+                break
+
+            batch_texts = train_dataset[i:i + batch_size]["text"]
+            inputs = tokenizer(
+                batch_texts, return_tensors="pt", padding=True,
+                truncation=True, max_length=config.model.max_seq_length,
+            ).to(student_model.device)
+
+            # Teacher forward pass (no gradients)
+            with torch.no_grad():
+                teacher_logits = teacher_model(**inputs).logits
+
+            # Student forward pass
+            student_logits = student_model(**inputs).logits
+
+            # KL divergence loss (teacher is target distribution)
+            loss = F.kl_div(
+                F.log_softmax(student_logits, dim=-1),
+                F.softmax(teacher_logits, dim=-1),
+                reduction="batchmean",
+            )
+
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            total_loss += loss.item()
+            step += 1
+
+            if step % 10 == 0:
+                avg_loss = total_loss / 10
+                print(f"  Step {step}/{max_steps} - KL loss: {avg_loss:.4f}")
+                total_loss = 0
+
+    print("Distillation training complete.")
+
+    # Save inserted layer weights
+    _save_inserted_layers(student_model, inserted_indices, output_dir)
+
+    # Clean up teacher to free GPU memory
+    del teacher_model
+    torch.cuda.empty_cache()
+
+    # Evaluate
+    max_samples = 50 if test_run else max_eval_samples
+    results = run_full_evaluation(
+        student_model, tokenizer,
+        output_dir=config.output_dir,
+        condition_name="condition_g_distillation",
+        max_samples=max_samples,
+        num_samples_pass_at_k=pass_at_k,
+    )
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Run experiment conditions for RL through inserted layers"
     )
     parser.add_argument(
         "--condition", type=str, required=True,
-        choices=["a", "b", "c", "d", "e"],
+        choices=["a", "b", "c", "d", "e", "g"],
         help="Which condition to run (a=baseline, b=lora+rl, c=inserted+rl, "
-             "d=inserted+sft, e=two-stage)",
+             "d=inserted+sft, e=two-stage, g=lora-distillation)",
     )
     parser.add_argument(
         "--test-run", action="store_true",
@@ -606,6 +720,7 @@ def main():
         "c": run_condition_c,
         "d": run_condition_d,
         "e": run_condition_e,
+        "g": run_condition_g,
     }
 
     condition_fn = conditions[args.condition]
@@ -620,7 +735,7 @@ def main():
             print(f"{'#'*60}")
         results = condition_fn(config, test_run=args.test_run, smoke_test=args.smoke_test, pass_at_k=args.pass_at_k,
                                max_eval_samples=args.max_eval_samples,
-                               **({"reuse_lora": args.reuse_lora} if args.condition == "e" else {}))
+                               **({"reuse_lora": args.reuse_lora} if args.condition in ("e", "g") else {}))
         all_results.append(results)
 
     if len(seeds) > 1:
