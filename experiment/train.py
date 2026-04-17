@@ -572,6 +572,10 @@ def main():
         "--max-eval-samples", type=int, default=None,
         help="Limit evaluation to this many samples per benchmark (default: all)",
     )
+    parser.add_argument(
+        "--insertion-positions", type=str, default=None,
+        help="Comma-separated layer positions for inserted layers (e.g., --insertion-positions 6,12,20,26 for 4 layers)",
+    )
     args = parser.parse_args()
 
     # --smoke-test implies --test-run
@@ -587,6 +591,12 @@ def main():
         config.model.quantize_4bit = False
         config.use_wandb = False
         print("SMOKE TEST: using SmolLM-135M on CPU (no GPU required)")
+
+    if args.insertion_positions:
+        positions = [int(p.strip()) for p in args.insertion_positions.split(",")]
+        config.inserted_layers.positions = positions
+        config.inserted_layers.num_layers = len(positions)
+        print(f"Overriding inserted layer positions: {positions} ({len(positions)} layers)")
 
     seeds = [int(s.strip()) for s in args.seeds.split(",")] if args.seeds else [args.seed]
 
