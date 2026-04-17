@@ -265,26 +265,12 @@ def run_full_evaluation(model, tokenizer, output_dir, condition_name,
         json.dump(gsm8k_hard_results, f, indent=2, default=str)
     print(f"Results saved to {gsm8k_hard_file}")
 
-    # MATH evaluation
-    print("\nRunning MATH evaluation...")
-    math_results = evaluate_math(
-        model, tokenizer,
-        max_samples=max_samples,
-    )
-    print(f"MATH accuracy: {math_results['accuracy']:.4f}")
-
-    math_results_file = output_path / "math_results.json"
-    with open(math_results_file, "w") as f:
-        json.dump(math_results, f, indent=2, default=str)
-    print(f"Results saved to {math_results_file}")
-
     # Summary
     summary = {
         "condition": condition_name,
         "gsm8k_pass_at_1": gsm8k_results["accuracy_at_1"],
         "gsm8k_pass_at_k": gsm8k_results["accuracy_at_k"],
         "gsm8k_hard_pass_at_1": gsm8k_hard_results["accuracy_at_1"],
-        "math_accuracy": math_results["accuracy"],
     }
 
     summary_file = output_path / "summary.json"
