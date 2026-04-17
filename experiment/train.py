@@ -87,7 +87,7 @@ class GradientNormCallback(TrainerCallback):
                 pass
 
 
-def run_condition_a(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1):
+def run_condition_a(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1, max_eval_samples: int = None):
     """Condition A: Baseline — evaluate the unmodified base model."""
     print("\n" + "=" * 60)
     print("CONDITION A: Baseline (no training)")
@@ -96,7 +96,7 @@ def run_condition_a(config: ExperimentConfig, test_run: bool = False, smoke_test
     model, tokenizer = load_base_model(config.model, smoke_test=smoke_test)
     print_model_summary(model)
 
-    max_samples = 50 if test_run else None
+    max_samples = 50 if test_run else max_eval_samples
     results = run_full_evaluation(
         model, tokenizer,
         output_dir=config.output_dir,
@@ -107,7 +107,7 @@ def run_condition_a(config: ExperimentConfig, test_run: bool = False, smoke_test
     return results
 
 
-def run_condition_b(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1):
+def run_condition_b(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1, max_eval_samples: int = None):
     """Condition B: LoRA + GRPO on frozen base."""
     print("\n" + "=" * 60)
     print("CONDITION B: LoRA + GRPO")
@@ -169,7 +169,7 @@ def run_condition_b(config: ExperimentConfig, test_run: bool = False, smoke_test
     model = trainer.model
 
     # Evaluate
-    max_samples = 50 if test_run else None
+    max_samples = 50 if test_run else max_eval_samples
     results = run_full_evaluation(
         model, tokenizer,
         output_dir=config.output_dir,
@@ -180,7 +180,7 @@ def run_condition_b(config: ExperimentConfig, test_run: bool = False, smoke_test
     return results
 
 
-def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1):
+def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1, max_eval_samples: int = None):
     """Condition C: Inserted layers + GRPO on frozen base."""
     print("\n" + "=" * 60)
     print("CONDITION C: Inserted Layers + GRPO")
@@ -253,7 +253,7 @@ def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test
     _save_inserted_layers(model, inserted_indices, output_dir)
 
     # Evaluate
-    max_samples = 50 if test_run else None
+    max_samples = 50 if test_run else max_eval_samples
     results = run_full_evaluation(
         model, tokenizer,
         output_dir=config.output_dir,
@@ -264,7 +264,7 @@ def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test
     return results
 
 
-def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1):
+def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1, max_eval_samples: int = None):
     """Condition D: Inserted layers + SFT on frozen base."""
     print("\n" + "=" * 60)
     print("CONDITION D: Inserted Layers + SFT")
@@ -322,7 +322,7 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
     _save_inserted_layers(model, inserted_indices, output_dir)
 
     # Evaluate
-    max_samples = 50 if test_run else None
+    max_samples = 50 if test_run else max_eval_samples
     results = run_full_evaluation(
         model, tokenizer,
         output_dir=config.output_dir,
@@ -333,7 +333,7 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
     return results
 
 
-def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1, reuse_lora: str = None):
+def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1, max_eval_samples: int = None, reuse_lora: str = None):
     """Condition E: Two-stage training — LoRA first, then inserted layers.
 
     Stage 1: Train LoRA adapters via GRPO to acquire reasoning capability.
@@ -352,7 +352,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
 
     model, tokenizer = load_base_model(config.model, smoke_test=smoke_test)
     train_dataset = load_gsm8k_train()
-    max_samples = 50 if test_run else None
+    max_samples = 50 if test_run else max_eval_samples
 
     if reuse_lora:
         # ──────────────────────────────────────────────
@@ -556,6 +556,10 @@ def main():
         "--reuse-lora", type=str, default=None,
         help="For condition E: skip stage 1 and load LoRA from this path (e.g., /workspace/results/condition_b_lora_rl)",
     )
+    parser.add_argument(
+        "--max-eval-samples", type=int, default=None,
+        help="Limit evaluation to this many samples per benchmark (default: all)",
+    )
     args = parser.parse_args()
 
     # --smoke-test implies --test-run
@@ -593,6 +597,7 @@ def main():
             print(f"Running with seed={seed}")
             print(f"{'#'*60}")
         results = condition_fn(config, test_run=args.test_run, smoke_test=args.smoke_test, pass_at_k=args.pass_at_k,
+                               max_eval_samples=args.max_eval_samples,
                                **({"reuse_lora": args.reuse_lora} if args.condition == "e" else {}))
         all_results.append(results)
 
