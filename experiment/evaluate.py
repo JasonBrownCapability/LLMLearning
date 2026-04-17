@@ -7,13 +7,13 @@ from pathlib import Path
 import torch
 from transformers import GenerationConfig
 
-from .data import load_gsm8k_test, load_math_test, PROMPT_TEMPLATE
+from .data import load_gsm8k_test, load_gsm8k_hard_test, load_math_test, PROMPT_TEMPLATE
 from .rewards import extract_gsm8k_answer, extract_math_answer
 
 
 def evaluate_gsm8k(model, tokenizer, max_samples=None, num_samples_pass_at_k=1,
-                   batch_size=8, max_new_tokens=512):
-    """Evaluate the model on GSM8K test set.
+                   batch_size=8, max_new_tokens=512, dataset_override=None):
+    """Evaluate the model on GSM8K test set (or a compatible dataset).
 
     Args:
         model: The model to evaluate.
@@ -22,11 +22,12 @@ def evaluate_gsm8k(model, tokenizer, max_samples=None, num_samples_pass_at_k=1,
         num_samples_pass_at_k: Number of samples for pass@k metric.
         batch_size: Batch size for generation.
         max_new_tokens: Maximum tokens to generate per problem.
+        dataset_override: Use this dataset instead of GSM8K test (must have prompt/answer columns).
 
     Returns:
         Dictionary with accuracy metrics and per-example results.
     """
-    dataset = load_gsm8k_test()
+    dataset = dataset_override if dataset_override is not None else load_gsm8k_test()
     if max_samples:
         dataset = dataset.select(range(min(max_samples, len(dataset))))
 
@@ -249,6 +250,21 @@ def run_full_evaluation(model, tokenizer, output_dir, condition_name,
         json.dump(gsm8k_results, f, indent=2, default=str)
     print(f"Results saved to {results_file}")
 
+    # GSM8K-Hard evaluation
+    print("\nRunning GSM8K-Hard evaluation...")
+    gsm8k_hard_results = evaluate_gsm8k(
+        model, tokenizer,
+        max_samples=max_samples,
+        num_samples_pass_at_k=1,
+        dataset_override=load_gsm8k_hard_test(),
+    )
+    print(f"GSM8K-Hard pass@1: {gsm8k_hard_results['accuracy_at_1']:.4f}")
+
+    gsm8k_hard_file = output_path / "gsm8k_hard_results.json"
+    with open(gsm8k_hard_file, "w") as f:
+        json.dump(gsm8k_hard_results, f, indent=2, default=str)
+    print(f"Results saved to {gsm8k_hard_file}")
+
     # MATH evaluation
     print("\nRunning MATH evaluation...")
     math_results = evaluate_math(
@@ -267,6 +283,7 @@ def run_full_evaluation(model, tokenizer, output_dir, condition_name,
         "condition": condition_name,
         "gsm8k_pass_at_1": gsm8k_results["accuracy_at_1"],
         "gsm8k_pass_at_k": gsm8k_results["accuracy_at_k"],
+        "gsm8k_hard_pass_at_1": gsm8k_hard_results["accuracy_at_1"],
         "math_accuracy": math_results["accuracy"],
     }
 

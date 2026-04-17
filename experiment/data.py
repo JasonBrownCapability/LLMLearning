@@ -64,6 +64,22 @@ def load_math_test():
     return dataset.map(format_math)
 
 
+def load_gsm8k_hard_test():
+    """Load GSM8K-Hard test set for evaluation.
+
+    Same problems as GSM8K but with larger, less common numbers.
+    Tests whether the model learned reasoning vs pattern matching.
+    """
+    dataset = load_dataset("reasoning-machines/gsm-hard", split="train")
+
+    def format_gsm_hard(example):
+        example["prompt"] = PROMPT_TEMPLATE.format(question=example["input"])
+        example["answer"] = f"#### {example['target']}"
+        return example
+
+    return dataset.map(format_gsm_hard)
+
+
 def load_gsm8k_sft():
     """Load GSM8K training set formatted for supervised fine-tuning.
 
