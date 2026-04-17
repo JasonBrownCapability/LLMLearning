@@ -333,10 +333,11 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
     return results
 
 
-def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1):
+def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1, reuse_lora: str = None):
     """Condition E: Two-stage training — LoRA first, then inserted layers.
 
     Stage 1: Train LoRA adapters via GRPO to acquire reasoning capability.
+             (Skipped if --reuse-lora is provided.)
     Stage 2: Merge LoRA into base weights, insert new layers, and train
              the inserted layers via GRPO on the strengthened base model.
     Stage 3: Evaluate the final model (merged base + trained inserted layers).
@@ -349,78 +350,88 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
     output_dir = os.path.join(config.output_dir, "condition_e_two_stage")
     os.makedirs(output_dir, exist_ok=True)
 
-    # ──────────────────────────────────────────────
-    # Stage 1: LoRA + GRPO (fast acquisition)
-    # ──────────────────────────────────────────────
-    print("\n--- Stage 1: LoRA + GRPO ---")
     model, tokenizer = load_base_model(config.model, smoke_test=smoke_test)
-
-    lora_config = LoraConfig(
-        r=two_stage.lora_rank,
-        lora_alpha=two_stage.lora_alpha,
-        lora_dropout=0.05,
-        target_modules=config.lora.target_modules,
-        bias="none",
-        task_type="CAUSAL_LM",
-    )
-
     train_dataset = load_gsm8k_train()
-    stage1_steps = 10 if test_run else two_stage.stage1_max_steps
-
-    grpo_config = TRLGRPOConfig(
-        output_dir=os.path.join(output_dir, "stage1_lora"),
-        num_generations=config.grpo.num_rollouts,
-        learning_rate=config.grpo.learning_rate,
-        warmup_steps=config.grpo.warmup_steps,
-        max_steps=stage1_steps,
-        per_device_train_batch_size=config.grpo.per_device_train_batch_size,
-        gradient_accumulation_steps=config.grpo.gradient_accumulation_steps,
-        gradient_checkpointing=config.grpo.gradient_checkpointing,
-        beta=config.grpo.kl_coef,
-        temperature=config.grpo.temperature,
-        max_completion_length=config.grpo.max_completion_length,
-        logging_steps=config.grpo.logging_steps,
-        save_steps=stage1_steps,
-        seed=config.seed,
-        report_to="wandb" if config.use_wandb else "none",
-        run_name="condition_e_stage1_lora",
-        bf16=not smoke_test,
-    )
-
-    trainer = GRPOTrainer(
-        model=model,
-        reward_funcs=gsm8k_reward_fn,
-        args=grpo_config,
-        train_dataset=train_dataset,
-        processing_class=tokenizer,
-        peft_config=lora_config,
-    )
-
-    print("Starting Stage 1 training...")
-    trainer.train()
-
-    # The trainer wraps the model with PEFT internally. Get the trained model.
-    model = trainer.model
-
-    # Evaluate with LoRA (to see what stage 1 achieved)
     max_samples = 50 if test_run else None
-    print("\nEvaluating after Stage 1 (with LoRA)...")
-    run_full_evaluation(
-        model, tokenizer,
-        output_dir=config.output_dir,
-        condition_name="condition_e_stage1_with_lora",
-        max_samples=max_samples,
-        num_samples_pass_at_k=pass_at_k,
-    )
+
+    if reuse_lora:
+        # ──────────────────────────────────────────────
+        # Stage 1 (skipped): Load pre-trained LoRA
+        # ──────────────────────────────────────────────
+        print(f"\n--- Stage 1: Loading pre-trained LoRA from {reuse_lora} ---")
+        from peft import PeftModel
+        model = PeftModel.from_pretrained(model, reuse_lora)
+        print("LoRA adapter loaded. Merging into base model...")
+        model = model.merge_and_unload()
+    else:
+        # ──────────────────────────────────────────────
+        # Stage 1: LoRA + GRPO (fast acquisition)
+        # ──────────────────────────────────────────────
+        print("\n--- Stage 1: LoRA + GRPO ---")
+
+        lora_config = LoraConfig(
+            r=two_stage.lora_rank,
+            lora_alpha=two_stage.lora_alpha,
+            lora_dropout=0.05,
+            target_modules=config.lora.target_modules,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+
+        stage1_steps = 10 if test_run else two_stage.stage1_max_steps
+
+        grpo_config = TRLGRPOConfig(
+            output_dir=os.path.join(output_dir, "stage1_lora"),
+            num_generations=config.grpo.num_rollouts,
+            learning_rate=config.grpo.learning_rate,
+            warmup_steps=config.grpo.warmup_steps,
+            max_steps=stage1_steps,
+            per_device_train_batch_size=config.grpo.per_device_train_batch_size,
+            gradient_accumulation_steps=config.grpo.gradient_accumulation_steps,
+            gradient_checkpointing=config.grpo.gradient_checkpointing,
+            beta=config.grpo.kl_coef,
+            temperature=config.grpo.temperature,
+            max_completion_length=config.grpo.max_completion_length,
+            logging_steps=config.grpo.logging_steps,
+            save_steps=stage1_steps,
+            seed=config.seed,
+            report_to="wandb" if config.use_wandb else "none",
+            run_name="condition_e_stage1_lora",
+            bf16=not smoke_test,
+        )
+
+        trainer = GRPOTrainer(
+            model=model,
+            reward_funcs=gsm8k_reward_fn,
+            args=grpo_config,
+            train_dataset=train_dataset,
+            processing_class=tokenizer,
+            peft_config=lora_config,
+        )
+
+        print("Starting Stage 1 training...")
+        trainer.train()
+
+        # The trainer wraps the model with PEFT internally. Get the trained model.
+        model = trainer.model
+
+        # Evaluate with LoRA (to see what stage 1 achieved)
+        print("\nEvaluating after Stage 1 (with LoRA)...")
+        run_full_evaluation(
+            model, tokenizer,
+            output_dir=config.output_dir,
+            condition_name="condition_e_stage1_with_lora",
+            max_samples=max_samples,
+            num_samples_pass_at_k=pass_at_k,
+        )
+
+        # Merge LoRA weights into the base model permanently
+        model = model.merge_and_unload()
 
     # ──────────────────────────────────────────────
     # Stage 2: Train inserted layers on LoRA-merged base
     # ──────────────────────────────────────────────
     print("\n--- Stage 2: Inserted Layers + GRPO on LoRA-merged base ---")
-
-    # Merge LoRA weights into the base model permanently, then discard
-    # the LoRA adapter. The model now has LoRA knowledge baked in.
-    model = model.merge_and_unload()
 
     # Now insert layers into the LoRA-merged model
     freeze_base_model(model)
@@ -545,6 +556,10 @@ def main():
         "--pass-at-k", type=int, default=1,
         help="Number of sampled generations for pass@k metric (default: 1, use 8 for pass@8)",
     )
+    parser.add_argument(
+        "--reuse-lora", type=str, default=None,
+        help="For condition E: skip stage 1 and load LoRA from this path (e.g., /workspace/results/condition_b_lora_rl)",
+    )
     args = parser.parse_args()
 
     # --smoke-test implies --test-run
@@ -581,7 +596,8 @@ def main():
             print(f"\n{'#'*60}")
             print(f"Running with seed={seed}")
             print(f"{'#'*60}")
-        results = condition_fn(config, test_run=args.test_run, smoke_test=args.smoke_test, pass_at_k=args.pass_at_k)
+        results = condition_fn(config, test_run=args.test_run, smoke_test=args.smoke_test, pass_at_k=args.pass_at_k,
+                               **({"reuse_lora": args.reuse_lora} if args.condition == "e" else {}))
         all_results.append(results)
 
     if len(seeds) > 1:
