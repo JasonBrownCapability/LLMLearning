@@ -313,7 +313,6 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
         args=sft_config,
         train_dataset=train_dataset,
         processing_class=tokenizer,
-        max_seq_length=config.model.max_seq_length,
         callbacks=[GradientNormCallback(model, inserted_indices)],
     )
 
