@@ -725,17 +725,22 @@ def main():
 
     condition_fn = conditions[args.condition]
     all_results = []
+    original_output_dir = config.output_dir
 
     for seed in seeds:
         config.seed = seed
         _set_seed(seed)
+        # Use per-seed output directories when running multiple seeds
         if len(seeds) > 1:
+            config.output_dir = os.path.join(original_output_dir, f"seed_{seed}")
+            os.makedirs(config.output_dir, exist_ok=True)
             print(f"\n{'#'*60}")
-            print(f"Running with seed={seed}")
+            print(f"Running with seed={seed} (output: {config.output_dir})")
             print(f"{'#'*60}")
         results = condition_fn(config, test_run=args.test_run, smoke_test=args.smoke_test, pass_at_k=args.pass_at_k,
                                max_eval_samples=args.max_eval_samples,
                                **({"reuse_lora": args.reuse_lora} if args.condition in ("e", "g") else {}))
+        results["seed"] = seed
         all_results.append(results)
 
     if len(seeds) > 1:
@@ -745,11 +750,24 @@ def main():
         print(f"{'='*60}")
         numeric_keys = [k for k in all_results[0]
                         if isinstance(all_results[0][k], (int, float))]
+        aggregated = {"condition": args.condition, "seeds": seeds, "num_seeds": len(seeds)}
         for key in numeric_keys:
+            if key == "seed":
+                continue
             values = [r[key] for r in all_results]
             mean = np.mean(values)
             std = np.std(values)
             print(f"  {key}: {mean:.4f} +/- {std:.4f}")
+            aggregated[f"{key}_mean"] = round(mean, 4)
+            aggregated[f"{key}_std"] = round(std, 4)
+            aggregated[f"{key}_per_seed"] = {s: round(v, 4) for s, v in zip(seeds, values)}
+
+        # Save aggregated results
+        import json
+        agg_path = os.path.join(original_output_dir, f"condition_{args.condition}_aggregated.json")
+        with open(agg_path, "w") as f:
+            json.dump(aggregated, f, indent=2)
+        print(f"\nAggregated results saved to {agg_path}")
     else:
         print(f"\n{'='*60}")
         print(f"RESULTS for condition {args.condition.upper()}:")
