@@ -691,6 +691,10 @@ def main():
         "--insertion-positions", type=str, default=None,
         help="Comma-separated layer positions for inserted layers (e.g., --insertion-positions 6,12,20,26 for 4 layers)",
     )
+    parser.add_argument(
+        "--model", type=str, default=None,
+        help="Override model name (e.g., meta-llama/Llama-3.2-3B)",
+    )
     args = parser.parse_args()
 
     # --smoke-test implies --test-run
@@ -700,6 +704,10 @@ def main():
     config = ExperimentConfig()
     config.output_dir = args.output_dir
     config.use_wandb = not args.no_wandb
+
+    if args.model:
+        config.model.name = args.model
+        print(f"Using model: {args.model}")
 
     if args.smoke_test:
         config.model.name = "HuggingFaceTB/SmolLM-135M"
