@@ -21,21 +21,28 @@ echo "============================================"
 echo ""
 echo ">>> Condition D: 2 inserted layers + SFT (3 seeds)"
 echo "============================================"
-python -m experiment.train --condition d --output-dir $OUTPUT_DIR --seeds $SEEDS
+# D 2-layer already complete — skip
+# python -m experiment.train --condition d --output-dir $OUTPUT_DIR --seeds $SEEDS
+
+# Clean caches between runs to prevent disk full
+cleanup() { rm -rf /root/.cache/* /tmp/pip-* 2>/dev/null; echo "Cache cleaned"; }
 
 echo ""
 echo ">>> Condition D: 4 inserted layers + SFT (3 seeds)"
 echo "============================================"
+cleanup
 python -m experiment.train --condition d --output-dir $OUTPUT_DIR --seeds $SEEDS --insertion-positions 6,12,20,26
 
 echo ""
 echo ">>> Condition E: LoRA-merged + 2 inserted + SFT (3 seeds)"
 echo "============================================"
+cleanup
 python -m experiment.train --condition e --reuse-lora $LORA_PATH --output-dir $OUTPUT_DIR --seeds $SEEDS
 
 echo ""
 echo ">>> Condition G: LoRA distillation (3 seeds)"
 echo "============================================"
+cleanup
 python -m experiment.train --condition g --reuse-lora $LORA_PATH --output-dir $OUTPUT_DIR --seeds $SEEDS
 
 echo ""
