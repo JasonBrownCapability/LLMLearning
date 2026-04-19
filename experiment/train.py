@@ -284,7 +284,8 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
 
     # Configure SFT
     max_steps = 10 if test_run else config.sft.max_steps
-    output_dir = os.path.join(config.output_dir, "condition_d_inserted_sft")
+    num_ins = config.inserted_layers.num_layers
+    output_dir = os.path.join(config.output_dir, f"condition_d_inserted_sft_{num_ins}layers")
 
     inserted_lr = config.sft.learning_rate / 10
 
@@ -301,7 +302,7 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
         save_strategy="no",
         seed=config.seed,
         report_to="wandb" if config.use_wandb else "none",
-        run_name="condition_d_inserted_sft",
+        run_name=f"condition_d_inserted_sft_{num_ins}layers",
         bf16=not smoke_test,
     )
 
@@ -326,7 +327,7 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
     results = run_full_evaluation(
         model, tokenizer,
         output_dir=config.output_dir,
-        condition_name="condition_d_inserted_sft",
+        condition_name=f"condition_d_inserted_sft_{num_ins}layers",
         max_samples=max_samples,
         num_samples_pass_at_k=pass_at_k,
     )
@@ -764,7 +765,8 @@ def main():
 
         # Save aggregated results
         import json
-        agg_path = os.path.join(original_output_dir, f"condition_{args.condition}_aggregated.json")
+        suffix = f"_{len(config.inserted_layers.positions)}layers" if args.insertion_positions else ""
+        agg_path = os.path.join(original_output_dir, f"condition_{args.condition}{suffix}_aggregated.json")
         with open(agg_path, "w") as f:
             json.dump(aggregated, f, indent=2)
         print(f"\nAggregated results saved to {agg_path}")
