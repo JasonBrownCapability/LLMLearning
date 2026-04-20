@@ -2,7 +2,7 @@
 # Llama 3.2 3B runs to verify pattern holds across model sizes
 # Run from the project root: bash run_3b.sh
 #
-# Estimated total time: ~8 hours
+# Estimated total time: ~12 hours
 
 set -e
 
@@ -46,6 +46,12 @@ echo ">>> Condition D: 4 inserted layers + SFT (3 seeds)"
 echo "============================================"
 cleanup
 python -m experiment.train --condition d --model $MODEL --output-dir $OUTPUT_DIR --seeds $SEEDS --insertion-positions 5,10,18,23
+
+echo ""
+echo ">>> Condition G: LoRA distillation (3 seeds)"
+echo "============================================"
+cleanup
+python -m experiment.train --condition g --model $MODEL --reuse-lora $LORA_PATH --output-dir $OUTPUT_DIR --seeds $SEEDS --insertion-positions 8,18
 
 echo ""
 echo "============================================"
