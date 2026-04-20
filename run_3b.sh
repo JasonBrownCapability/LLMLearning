@@ -16,6 +16,14 @@ mkdir -p $OUTPUT_DIR
 # Clean caches between runs to prevent disk full
 cleanup() { rm -rf /root/.cache/* /tmp/pip-* 2>/dev/null; echo "Cache cleaned"; }
 
+# Wait for model access if not yet granted
+echo "Checking access to $MODEL..."
+while ! python -c "from huggingface_hub import model_info; model_info('$MODEL')" 2>/dev/null; do
+    echo "$(date): Access to $MODEL not yet granted. Retrying in 15 minutes..."
+    sleep 900
+done
+echo "Access confirmed!"
+
 echo "============================================"
 echo "Llama 3.2 3B runs"
 echo "Model: $MODEL"
