@@ -515,6 +515,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
 
 def _save_inserted_layers(model, inserted_indices, output_dir):
     """Save only the inserted layer weights (not the full model)."""
+    import time
     os.makedirs(output_dir, exist_ok=True)
     state_dict = {}
     for idx in inserted_indices:
@@ -523,8 +524,20 @@ def _save_inserted_layers(model, inserted_indices, output_dir):
             state_dict[f"inserted_layer_{idx}.{name}"] = param.cpu()
 
     save_path = os.path.join(output_dir, "inserted_layers.pt")
-    torch.save(state_dict, save_path)
-    print(f"Saved inserted layer weights to {save_path}")
+    for attempt in range(5):
+        try:
+            torch.save(state_dict, save_path)
+            print(f"Saved inserted layer weights to {save_path}")
+            return
+        except (OSError, RuntimeError) as e:
+            print(f"Save attempt {attempt + 1}/5 failed: {e}")
+            if attempt < 4:
+                print(f"Retrying in 30 seconds...")
+                time.sleep(30)
+    print(f"WARNING: Failed to save weights after 5 attempts. Saving to /tmp as fallback.")
+    fallback = f"/tmp/inserted_layers_fallback.pt"
+    torch.save(state_dict, fallback)
+    print(f"Fallback saved to {fallback}")
 
 
 def run_condition_g(config: ExperimentConfig, test_run: bool = False, smoke_test: bool = False, pass_at_k: int = 1, max_eval_samples: int = None, reuse_lora: str = None):
@@ -772,12 +785,19 @@ def main():
             aggregated[f"{key}_per_seed"] = {s: round(v, 4) for s, v in zip(seeds, values)}
 
         # Save aggregated results
-        import json
+        import json, time
         suffix = f"_{len(config.inserted_layers.positions)}layers" if args.insertion_positions else ""
         agg_path = os.path.join(original_output_dir, f"condition_{args.condition}{suffix}_aggregated.json")
-        with open(agg_path, "w") as f:
-            json.dump(aggregated, f, indent=2)
-        print(f"\nAggregated results saved to {agg_path}")
+        for attempt in range(5):
+            try:
+                with open(agg_path, "w") as f:
+                    json.dump(aggregated, f, indent=2)
+                print(f"\nAggregated results saved to {agg_path}")
+                break
+            except OSError as e:
+                print(f"Save attempt {attempt + 1}/5 failed: {e}")
+                if attempt < 4:
+                    time.sleep(30)
     else:
         print(f"\n{'='*60}")
         print(f"RESULTS for condition {args.condition.upper()}:")
