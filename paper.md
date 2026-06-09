@@ -16,7 +16,7 @@ We compare two ways to add a fixed compute budget to a frozen large language mod
 
 ## 1. Introduction
 
-Adapting a pretrained large language model to a new task class — for example, math word-problem reasoning — is dominated in practice by two recipes. The first applies low-rank weight deltas (LoRA [Hu et al., 2021] and its descendants) inside every existing transformer layer. The second runs reinforcement learning against a verifier that scores model outputs (RLHF [Ouyang et al., 2022], DPO [Rafailov et al., 2023], GRPO [DeepSeek-AI, 2024]). When both are combined — LoRA adapters trained with a verifier-based RL algorithm such as GRPO — practitioners get strong results on math benchmarks like GSM8K [Cobbe et al., 2021], but at substantial wall-clock cost: a single 2,000-step GRPO run on a Llama-3.1 8B model takes roughly a day on a single A100.
+Adapting a pretrained large language model to a new task class — for example, math word-problem reasoning — is dominated in practice by two recipes. The first applies low-rank weight deltas (LoRA [Hu et al., 2021] and its descendants) inside every existing transformer layer. The second runs reinforcement learning against a verifier that scores model outputs (RLHF [Ouyang et al., 2022], DPO [Rafailov et al., 2023], GRPO [Shao et al., 2024]). When both are combined — LoRA adapters trained with a verifier-based RL algorithm such as GRPO — practitioners get strong results on math benchmarks like GSM8K [Cobbe et al., 2021], but at substantial wall-clock cost: a single 2,000-step GRPO run on a Llama-3.1 8B model takes roughly a day on a single A100.
 
 A natural alternative axis exists. Instead of editing every existing layer with a small update, one can *add* a small number of new full-rank transformer layers to a frozen base, training only those. Earlier adapter-style work [Houlsby et al., 2019] inserted bottleneck blocks inside each layer; we instead insert a small number (two or four) of full `LlamaDecoderLayer` blocks at sparse depth positions, with output projections initialised to zero so that the augmented network produces an identity at step 0. Compared to LoRA, this places the trainable parameters in **sparse full-rank** form along the residual stream (a few new layers, each with full attention + FFN capacity) rather than in **dense low-rank** form (rank-bounded edits applied to every layer's linear projections). Our prior expectation was that for reasoning tasks the sparse full-rank parameterisation might be a better fit than rank-64 deltas distributed across every layer.
 
@@ -49,7 +49,7 @@ A separate line of work, *depth up-scaling* [Kim et al., 2023, "Solar 10.7B"; LL
 
 **RL for reasoning.** Verifier-based reinforcement learning has become the dominant recipe for sharpening math-reasoning capability in pretrained LLMs. PPO-style methods [Schulman et al., 2017] and their critic-free descendants — RLOO [Ahmadian et al., 2024], GRPO [Shao et al., 2024] — train against a binary correctness signal extracted from the model's generation. GRPO in particular avoids a separate value model by using the group-mean reward as baseline, which is why we use it: it fits in one A100's memory budget. The well-known cost is many forward passes per gradient update (we use eight rollouts per prompt). One implication of our results — discussed in §5 — is that RL's edge over SFT is partly driven by what supervision is available; when high-quality solution traces are present, much of the RL gain can be recovered by SFT at far lower compute.
 
-**Distillation.** Hinton-style logit distillation [Hinton et al., 2015] and its many descendants — including LM-targeted variants such as DistilLM [Ko et al., 2024] and on-policy distillation procedures such as MiniLLM [Gu et al., 2024] — typically transfer knowledge from a larger or differently-trained teacher to a student. Our distillation setup (condition G) is unusual in two ways: teacher and student share *identical frozen base weights* and differ only in their adaptation (LoRA vs inserted layers), and the distillation is on the GSM8K-train *prompts only* — none of the gold answers or solution traces enter the training signal. (The prompts themselves are drawn from a labelled corpus, so the setup is not "label-free" in the strict sense; it does not re-use the gold answers that B was trained against.) The trained adapter encodes a target output distribution, and the inserted-layer student learns to re-express that distribution with parameters localised at sparse depth positions rather than distributed across all layers. Conceptually this resembles on-policy distillation (the student matches the teacher's outputs on the training prompts), but it is performed against the teacher's logits computed in the same forward pass rather than during interactive rollout.
+**Distillation.** Hinton-style logit distillation [Hinton et al., 2015] and its many descendants — including LM-targeted variants such as DistiLLM [Ko et al., 2024] and on-policy distillation procedures such as MiniLLM [Gu et al., 2024] — typically transfer knowledge from a larger or differently-trained teacher to a student. Our distillation setup (condition G) is unusual in two ways: teacher and student share *identical frozen base weights* and differ only in their adaptation (LoRA vs inserted layers), and the distillation is on the GSM8K-train *prompts only* — none of the gold answers or solution traces enter the training signal. (The prompts themselves are drawn from a labelled corpus, so the setup is not "label-free" in the strict sense; it does not re-use the gold answers that B was trained against.) The trained adapter encodes a target output distribution, and the inserted-layer student learns to re-express that distribution with parameters localised at sparse depth positions rather than distributed across all layers. Conceptually this resembles on-policy distillation (the student matches the teacher's outputs on the training prompts), but it is performed against the teacher's logits computed in the same forward pass rather than during interactive rollout.
 
 ---
 
@@ -465,26 +465,25 @@ All conditions scored below 2% pass@1 on MATH at both base sizes (best: E at 2.0
 
 ## References
 
-Citations are intentionally light in this preprint; full bibliography to be added in the conference revision. Key works referenced:
+References are listed alphabetically by first author. Author lists are abbreviated to the first author *et al.*; full author lists will be expanded for the camera-ready revision.
 
-- Cobbe et al. 2021. *Training Verifiers to Solve Math Word Problems.* arXiv:2110.14168 (GSM8K).
-- DeepSeek-AI 2024. *DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models.* arXiv:2402.03300 (GRPO).
-- Dettmers et al. 2023. *QLoRA: Efficient Finetuning of Quantized LLMs.* NeurIPS 2023 (NF4 double-quant).
-- Hinton et al. 2015. *Distilling the Knowledge in a Neural Network.* arXiv:1503.02531.
-- Gu et al. 2024. *MiniLLM: Knowledge Distillation of Large Language Models.* ICLR 2024 (on-policy LM distillation).
-- Ko et al. 2024. *DistiLLM: Towards Streamlined Distillation for Large Language Models.* ICML 2024.
-- Houlsby et al. 2019. *Parameter-Efficient Transfer Learning for NLP.* ICML 2019 (Houlsby adapters).
-- Hu et al. 2021. *LoRA: Low-Rank Adaptation of Large Language Models.* arXiv:2106.09685.
-- Kim et al. 2023. *Solar 10.7B: Scaling Large Language Models with Simple yet Effective Depth Up-Scaling.* arXiv:2312.15166.
-- Liu et al. 2022. *Few-Shot Parameter-Efficient Fine-Tuning is Better and Cheaper than In-Context Learning.* NeurIPS 2022 (IA3).
-- Liu et al. 2024. *DoRA: Weight-Decomposed Low-Rank Adaptation.* ICML 2024.
-- Ouyang et al. 2022. *Training Language Models to Follow Instructions with Human Feedback.* NeurIPS 2022 (RLHF / InstructGPT).
-- Rafailov et al. 2023. *Direct Preference Optimization.* NeurIPS 2023 (DPO).
-- Schulman et al. 2017. *Proximal Policy Optimization Algorithms.* arXiv:1707.06347 (PPO).
-- Shao et al. 2024. *DeepSeekMath* — see DeepSeek-AI 2024 above (GRPO).
-- Wu et al. 2024. *LLaMA Pro: Progressive LLaMA with Block Expansion.* ACL 2024.
-- Ahmadian et al. 2024. *Back to Basics: Revisiting REINFORCE-style Optimization for Learning from Human Feedback in LLMs.* arXiv:2402.14740 (RLOO).
-- Kalajdzievski 2023. *A Rank Stabilization Scaling Factor for Fine-Tuning with LoRA.* arXiv:2312.03732 (rsLoRA).
+- Ahmadian, A., et al. 2024. *Back to Basics: Revisiting REINFORCE-style Optimization for Learning from Human Feedback in LLMs.* arXiv:2402.14740. (RLOO)
+- Cobbe, K., et al. 2021. *Training Verifiers to Solve Math Word Problems.* arXiv:2110.14168. (GSM8K)
+- Dettmers, T., et al. 2023. *QLoRA: Efficient Finetuning of Quantized LLMs.* Advances in Neural Information Processing Systems (NeurIPS) 36. arXiv:2305.14314. (NF4 double-quantisation)
+- Gu, Y., et al. 2024. *MiniLLM: Knowledge Distillation of Large Language Models.* International Conference on Learning Representations (ICLR). arXiv:2306.08543. (on-policy LM distillation)
+- Hinton, G., Vinyals, O., and Dean, J. 2015. *Distilling the Knowledge in a Neural Network.* arXiv:1503.02531.
+- Houlsby, N., et al. 2019. *Parameter-Efficient Transfer Learning for NLP.* International Conference on Machine Learning (ICML). arXiv:1902.00751. (Houlsby adapters)
+- Hu, E. J., et al. 2021. *LoRA: Low-Rank Adaptation of Large Language Models.* arXiv:2106.09685.
+- Kalajdzievski, D. 2023. *A Rank Stabilization Scaling Factor for Fine-Tuning with LoRA.* arXiv:2312.03732. (rsLoRA)
+- Kim, D., et al. 2023. *SOLAR 10.7B: Scaling Large Language Models with Simple yet Effective Depth Up-Scaling.* arXiv:2312.15166.
+- Ko, J., et al. 2024. *DistiLLM: Towards Streamlined Distillation for Large Language Models.* International Conference on Machine Learning (ICML). arXiv:2402.03898.
+- Liu, H., et al. 2022. *Few-Shot Parameter-Efficient Fine-Tuning is Better and Cheaper than In-Context Learning.* Advances in Neural Information Processing Systems (NeurIPS) 35. arXiv:2205.05638. (IA3)
+- Liu, S.-Y., et al. 2024. *DoRA: Weight-Decomposed Low-Rank Adaptation.* International Conference on Machine Learning (ICML). arXiv:2402.09353.
+- Ouyang, L., et al. 2022. *Training Language Models to Follow Instructions with Human Feedback.* Advances in Neural Information Processing Systems (NeurIPS) 35. arXiv:2203.02155. (RLHF / InstructGPT)
+- Rafailov, R., et al. 2023. *Direct Preference Optimization: Your Language Model is Secretly a Reward Model.* Advances in Neural Information Processing Systems (NeurIPS) 36. arXiv:2305.18290. (DPO)
+- Schulman, J., et al. 2017. *Proximal Policy Optimization Algorithms.* arXiv:1707.06347. (PPO)
+- Shao, Z., et al. 2024. *DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models.* arXiv:2402.03300. (GRPO; also released as DeepSeek-AI 2024)
+- Wu, C., et al. 2024. *LLaMA Pro: Progressive LLaMA with Block Expansion.* Annual Meeting of the Association for Computational Linguistics (ACL). arXiv:2401.02415.
 
 ---
 

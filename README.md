@@ -20,6 +20,32 @@ The intuition is that inserted layers add *serial depth* (more sequential proces
 
 See `RL-Through-Inserted-Layers.md` for the full research document and `Experiment-Design.md` for the experimental design rationale.
 
+## Paper & Results
+
+The full write-up is in **[`paper.md`](paper.md)**: *Inserted Layers + SFT Match LoRA + RL on GSM8K at 60× Less Compute, and Can Be Trained Without Re-using Gold Answers via Distillation* (Llama-3.1 8B and Llama-3.2 3B).
+
+**Headline findings:**
+
+- **The going-in hypothesis is *not* supported.** Inserted layers + GRPO (C) reaches 50.3% on GSM8K vs LoRA + GRPO (B) at 59.7% on 8B — a clean negative result.
+- **The surprise:** replacing RL with plain SFT on the same inserted layers (D) reaches **59.4% in ~22 minutes** vs B's ~22 hours — within seed noise, at **~60× lower compute**.
+- **Distillation (G)** trains inserted layers to match the LoRA teacher's logits using no gold answers in the gradient, recovering ~91% of B's accuracy.
+- On the smaller **3B** base, 2 inserted layers + SFT statistically tie B at ~30× less compute; a 4-layer variant exceeds B at 4× the trainable parameters.
+
+Caveats are stated loudly in the paper: the comparison is **compute-matched, not parameter-matched** (inserted recipes carry ~2.6× more trainable params than LoRA r=64), and the key 8B B/C/D-2L runs are single-seed.
+
+**Released alongside the paper:**
+
+- `paper_figures/` — the three figures (PNG + SVG) and the scripts that regenerate them.
+- `results*/` — per-example GSM8K / GSM8K-Hard evaluations, summaries, and multi-seed aggregates at the paths the paper cites (Appendix A).
+- `results/wandb_logs.tar.gz` — per-step training logs behind Figure 3.
+
+**Regenerate the figures** from the committed data (no GPU, no large artifacts needed):
+
+```bash
+python paper_figures/extract_training_curves.py   # wandb logs -> training_curves.json (Figure 3 data)
+python paper_figures/build_figures.py             # -> fig1 (compute–accuracy), fig2 (architecture), fig3 (training dynamics)
+```
+
 ## Prerequisites
 
 - **Python** 3.10+
@@ -89,7 +115,7 @@ git clone https://github.com/JasonBrownCapability/LLMLearning.git
 cd LLMLearning
 ```
 
-> **Note:** This is a private repo. You'll need a GitHub Personal Access Token with `repo` scope. Generate one at GitHub > Settings > Developer settings > Personal access tokens.
+> **Note:** This is a public repo, so no authentication is needed to clone.
 
 ### 3. Set up persistent storage
 
