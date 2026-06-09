@@ -19,6 +19,7 @@ authors:
     email: jason.brown@capability-systems.com
 version: 1.0.0
 date-released: "2026-06-10"
+license: Apache-2.0
 repository-code: "https://github.com/JasonBrownCapability/LLMLearning"
 url: "https://github.com/JasonBrownCapability/LLMLearning"
 keywords:
