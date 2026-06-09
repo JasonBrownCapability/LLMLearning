@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+message: "If you use this software, its data, or its results, please cite it as below."
+title: >-
+  Inserted Layers + SFT Match LoRA + RL on GSM8K at 60x Less Compute,
+  and Can Be Trained Without Re-using Gold Answers via Distillation
+abstract: >-
+  Code, evaluation outputs, and figure-regeneration scripts accompanying a
+  controlled comparison of low-rank adaptation (LoRA) against inserting new
+  full-rank transformer layers into a frozen base for GSM8K math reasoning,
+  on Llama-3.1 8B and Llama-3.2 3B. SFT into two inserted layers matches
+  LoRA + GRPO within seed noise at roughly 60x lower training compute; a
+  distillation procedure re-encodes a trained LoRA into inserted layers
+  without re-using gold answers.
+type: software
+authors:
+  - family-names: Brown
+    given-names: Jason
+    affiliation: Capability Systems
+    email: jason.brown@capability-systems.com
+version: 1.0.0
+date-released: "2026-06-10"
+repository-code: "https://github.com/JasonBrownCapability/LLMLearning"
+url: "https://github.com/JasonBrownCapability/LLMLearning"
+keywords:
+  - large language models
+  - parameter-efficient fine-tuning
+  - LoRA
+  - reinforcement learning
+  - GRPO
+  - knowledge distillation
+  - GSM8K
+  - mathematical reasoning
+preferred-citation:
+  type: article
+  title: >-
+    Inserted Layers + SFT Match LoRA + RL on GSM8K at 60x Less Compute,
+    and Can Be Trained Without Re-using Gold Answers via Distillation
+  authors:
+    - family-names: Brown
+      given-names: Jason
+      affiliation: Capability Systems
+      email: jason.brown@capability-systems.com
+  year: 2026
+  notes: >-
+    Preprint. A controlled comparison on Llama-3.1 8B and Llama-3.2 3B.
