@@ -1,0 +1,6 @@
+{
+  "condition": "condition_g_distillation",
+  "gsm8k_pass_at_1": 0.29492039423805916,
+  "gsm8k_pass_at_k": 0.29492039423805916,
+  "gsm8k_hard_pass_at_1": 0.07050796057619409
+}

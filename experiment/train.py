@@ -148,7 +148,7 @@ def run_condition_b(config: ExperimentConfig, test_run: bool = False, smoke_test
         save_steps=config.grpo.save_steps if not test_run else max_steps,
         seed=config.seed,
         report_to="wandb" if config.use_wandb else "none",
-        run_name="condition_b_lora_rl",
+        run_name=f"condition_b_lora_rl_seed{config.seed}",
         bf16=not smoke_test,
     )
 
@@ -164,6 +164,7 @@ def run_condition_b(config: ExperimentConfig, test_run: bool = False, smoke_test
     print("\nStarting LoRA + GRPO training...")
     trainer.train()
     trainer.save_model(output_dir)
+    _save_trainer_state(trainer, output_dir)
 
     # Use the trainer's model (which has LoRA applied) for evaluation
     model = trainer.model
@@ -229,7 +230,7 @@ def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test
         save_strategy="no",
         seed=config.seed,
         report_to="wandb" if config.use_wandb else "none",
-        run_name="condition_c_inserted_rl",
+        run_name=f"condition_c_inserted_rl_seed{config.seed}",
         bf16=not smoke_test,
     )
 
@@ -251,6 +252,7 @@ def run_condition_c(config: ExperimentConfig, test_run: bool = False, smoke_test
 
     # Save only the inserted layer weights
     _save_inserted_layers(model, inserted_indices, output_dir)
+    _save_trainer_state(trainer, output_dir)
 
     # Evaluate
     max_samples = 50 if test_run else max_eval_samples
@@ -302,7 +304,7 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
         save_strategy="no",
         seed=config.seed,
         report_to="wandb" if config.use_wandb else "none",
-        run_name=f"condition_d_inserted_sft_{num_ins}layers",
+        run_name=f"condition_d_inserted_sft_{num_ins}layers_seed{config.seed}",
         bf16=not smoke_test,
     )
 
@@ -321,6 +323,7 @@ def run_condition_d(config: ExperimentConfig, test_run: bool = False, smoke_test
     trainer.train()
 
     _save_inserted_layers(model, inserted_indices, output_dir)
+    _save_trainer_state(trainer, output_dir)
 
     # Evaluate
     max_samples = 50 if test_run else max_eval_samples
@@ -407,7 +410,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
             save_steps=stage1_steps,
             seed=config.seed,
             report_to="wandb" if config.use_wandb else "none",
-            run_name="condition_e_stage1_lora",
+            run_name=f"condition_e_stage1_lora_seed{config.seed}",
             bf16=not smoke_test,
         )
 
@@ -422,6 +425,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
 
         print("Starting Stage 1 training...")
         trainer.train()
+        _save_trainer_state(trainer, os.path.join(output_dir, "stage1_lora"))
 
         # The trainer wraps the model with PEFT internally. Get the trained model.
         model = trainer.model
@@ -471,7 +475,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
         save_strategy="no",
         seed=config.seed,
         report_to="wandb" if config.use_wandb else "none",
-        run_name="condition_e_stage2_inserted_sft",
+        run_name=f"condition_e_stage2_inserted_sft_seed{config.seed}",
         bf16=not smoke_test,
     )
 
@@ -494,6 +498,7 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
     trainer_s2.train()
 
     _save_inserted_layers(model, inserted_indices, output_dir)
+    _save_trainer_state(trainer_s2, os.path.join(output_dir, "stage2_inserted"))
 
     # ──────────────────────────────────────────────
     # Stage 3: Final evaluation
@@ -511,6 +516,20 @@ def run_condition_e(config: ExperimentConfig, test_run: bool = False, smoke_test
         num_samples_pass_at_k=pass_at_k,
     )
     return results
+
+
+def _save_trainer_state(trainer, output_dir):
+    """Persist the trainer's in-memory log history as trainer_state.json.
+
+    Needed because C/D/E use save_strategy="no" (to work around the
+    _hf_peft_config_loaded hack), so checkpoints — and their trainer_state —
+    are never written to disk. Without this, training curves are only
+    available from wandb, which has historically been patchy.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    path = os.path.join(output_dir, "trainer_state.json")
+    trainer.state.save_to_json(path)
+    print(f"Saved trainer state ({len(trainer.state.log_history)} log entries) to {path}")
 
 
 def _save_inserted_layers(model, inserted_indices, output_dir):
@@ -592,9 +611,34 @@ def run_condition_g(config: ExperimentConfig, test_run: bool = False, smoke_test
     )
 
     print(f"\nStarting distillation training ({max_steps} steps, lr={inserted_lr})...")
+
+    # Initialize wandb for this custom loop (HF Trainer isn't wrapping it).
+    wandb_run = None
+    if config.use_wandb:
+        try:
+            import wandb
+            wandb_run = wandb.init(
+                project=os.environ.get("WANDB_PROJECT", "rl-inserted-layers"),
+                name=f"condition_g_distillation_seed{config.seed}",
+                config={
+                    "condition": "g",
+                    "seed": config.seed,
+                    "model": config.model.name,
+                    "max_steps": max_steps,
+                    "learning_rate": inserted_lr,
+                    "batch_size": batch_size,
+                    "insertion_positions": config.inserted_layers.positions,
+                },
+                reinit=True,
+            )
+        except Exception as e:
+            print(f"wandb init failed ({e}); continuing without wandb.")
+            wandb_run = None
+
     student_model.train()
     step = 0
-    total_loss = 0
+    running_loss = 0.0
+    log_history = []
 
     while step < max_steps:
         for i in range(0, len(train_dataset), batch_size):
@@ -625,15 +669,32 @@ def run_condition_g(config: ExperimentConfig, test_run: bool = False, smoke_test
             optimizer.step()
             optimizer.zero_grad()
 
-            total_loss += loss.item()
+            loss_val = loss.item()
+            running_loss += loss_val
             step += 1
 
             if step % 10 == 0:
-                avg_loss = total_loss / 10
+                avg_loss = running_loss / 10
                 print(f"  Step {step}/{max_steps} - KL loss: {avg_loss:.4f}")
-                total_loss = 0
+                entry = {"step": step, "loss": avg_loss, "kl_loss": avg_loss}
+                log_history.append(entry)
+                if wandb_run is not None:
+                    wandb_run.log({"loss": avg_loss, "kl_loss": avg_loss}, step=step)
+                running_loss = 0.0
 
     print("Distillation training complete.")
+
+    # Persist the log history in the same format as trainer_state.json so
+    # plotting/analysis code can treat G identically to the HF conditions.
+    import json as _json
+    os.makedirs(output_dir, exist_ok=True)
+    trainer_state_path = os.path.join(output_dir, "trainer_state.json")
+    with open(trainer_state_path, "w") as f:
+        _json.dump({"global_step": step, "log_history": log_history}, f, indent=2)
+    print(f"Saved trainer state ({len(log_history)} log entries) to {trainer_state_path}")
+
+    if wandb_run is not None:
+        wandb_run.finish()
 
     # Save inserted layer weights
     _save_inserted_layers(student_model, inserted_indices, output_dir)
@@ -717,6 +778,11 @@ def main():
     config = ExperimentConfig()
     config.output_dir = args.output_dir
     config.use_wandb = not args.no_wandb
+
+    # Route wandb runs to the project named in config (default: rl-inserted-layers)
+    # instead of HF Transformers' default "huggingface" project.
+    if config.use_wandb:
+        os.environ.setdefault("WANDB_PROJECT", config.wandb_project)
 
     if args.model:
         config.model.name = args.model

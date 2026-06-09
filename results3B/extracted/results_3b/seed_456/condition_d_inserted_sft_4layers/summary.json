@@ -1,0 +1,6 @@
+{
+  "condition": "condition_d_inserted_sft_4layers",
+  "gsm8k_pass_at_1": 0.36542835481425323,
+  "gsm8k_pass_at_k": 0.36542835481425323,
+  "gsm8k_hard_pass_at_1": 0.10007581501137225
+}

@@ -1,0 +1,30 @@
+{
+  "condition": "d",
+  "seeds": [
+    42,
+    123,
+    456
+  ],
+  "num_seeds": 3,
+  "gsm8k_pass_at_1_mean": 0.3563,
+  "gsm8k_pass_at_1_std": 0.0074,
+  "gsm8k_pass_at_1_per_seed": {
+    "42": 0.3472,
+    "123": 0.3563,
+    "456": 0.3654
+  },
+  "gsm8k_pass_at_k_mean": 0.3563,
+  "gsm8k_pass_at_k_std": 0.0074,
+  "gsm8k_pass_at_k_per_seed": {
+    "42": 0.3472,
+    "123": 0.3563,
+    "456": 0.3654
+  },
+  "gsm8k_hard_pass_at_1_mean": 0.0986,
+  "gsm8k_hard_pass_at_1_std": 0.0012,
+  "gsm8k_hard_pass_at_1_per_seed": {
+    "42": 0.097,
+    "123": 0.0986,
+    "456": 0.1001
+  }
+}

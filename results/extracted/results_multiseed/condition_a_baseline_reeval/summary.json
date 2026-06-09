@@ -1,0 +1,5 @@
+{
+  "condition": "condition_a_baseline",
+  "gsm8k_pass_at_1": 0.13115996967399546,
+  "gsm8k_hard_pass_at_1": 0.03866565579984837
+}

@@ -1,0 +1,7 @@
+{
+  "condition": "condition_e_two_stage_final",
+  "gsm8k_pass_at_1": 0.56,
+  "gsm8k_pass_at_k": 0.56,
+  "gsm8k_hard_pass_at_1": 0.2,
+  "math_accuracy": 0.02
+}

@@ -1,0 +1,22 @@
+# ── Large data artifacts — never commit (the results*/ dirs hold ~73 GB) ──
+# Multi-GB result archives and raw run bundles.
+*.tar
+*.tar.gz
+# …except the small wandb log bundle that Figure 3 / the extractor depend on.
+!results/wandb_logs.tar.gz
+
+# Model weights and tokenizers (redundant with the public base models).
+*.safetensors
+*.bin
+*.pt
+*.pth
+**/tokenizer.json
+
+# ── Internal / working files not for publication ──
+critique.md
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
