@@ -1,5 +1,7 @@
 # RL Through Inserted Transformer Layers — Experiment
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20618627.svg)](https://doi.org/10.5281/zenodo.20618627)
+
 ## Executive Summary
 
 When you want to teach an LLM new skills (like math reasoning), the standard approach is **LoRA**: attach small adapter weights to every existing layer, tweaking how the model already thinks. This experiment tests an alternative: **inserting brand new layers** into the middle of the model. The existing 32 layers are frozen completely and only the 2 new layers learn, giving the model extra "thinking steps" rather than changing existing ones.

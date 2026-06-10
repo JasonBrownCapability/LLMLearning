@@ -20,6 +20,7 @@ authors:
 version: 1.0.0
 date-released: "2026-06-10"
 license: Apache-2.0
+doi: 10.5281/zenodo.20618627
 repository-code: "https://github.com/JasonBrownCapability/LLMLearning"
 url: "https://github.com/JasonBrownCapability/LLMLearning"
 keywords:
