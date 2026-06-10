@@ -447,7 +447,7 @@ Approximate single-A100 GPU-hours and RunPod cost at $1.89/hour:
 - Datasets: `gsm8k` (HuggingFace `gsm8k`/`main`, train 7,473 / test 1,319), `gsm8k_hard` (custom upload, 1,099), `MATH` (`hendrycks/competition_math`, 5,000 test). Exact dataset content hashes are in the repository.
 - Seeds: 42 for single-seed conditions; 42, 123, 456 for multi-seed conditions
 - Code: <https://github.com/JasonBrownCapability/LLMLearning>
-- Archived snapshot (citable DOI): <https://doi.org/10.5281/zenodo.20618627>
+- Archived snapshot (citable DOI, all versions): <https://doi.org/10.5281/zenodo.20618626>
 
 ### H. Sample reasoning traces
 
